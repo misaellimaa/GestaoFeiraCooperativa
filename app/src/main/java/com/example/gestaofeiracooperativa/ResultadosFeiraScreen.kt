@@ -1,4 +1,4 @@
-package com.example.gestaofeiracooperativa
+package com.example.gestaofeiracooperativa // <<--- ATENÇÃO: MUDE PARA O SEU PACKAGE REAL
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,7 +24,7 @@ import java.io.File // Para manipulação de arquivos
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultadosFeiraScreen(
-    resultadoGeralFeira: ResultadoGeralFeira,
+    resultadoGeralFeira: ResultadoGeralFeira, // Recebe o objeto completo
     onVoltar: () -> Unit,
     onSalvarFeira: () -> Unit // Já existe
 ) {
@@ -72,8 +72,13 @@ fun ResultadosFeiraScreen(
                     }
                     // Botão Exportar PDF Geral
                     IconButton(onClick = {
-                        val pdfFile = PdfGenerator.generateSummaryPdf(context, resultadoGeralFeira)
-                        compartilharPdf(pdfFile, resultadoGeralFeira.fairDetails.feiraId, "Resumo da Feira ${resultadoGeralFeira.fairDetails.feiraId}")
+                        try {
+                            val pdfFile = PdfGenerator.generateSummaryPdf(context, resultadoGeralFeira)
+                            compartilharPdf(pdfFile, resultadoGeralFeira.fairDetails.feiraId, "Resumo da Feira ${resultadoGeralFeira.fairDetails.feiraId}")
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Erro ao gerar PDF Geral: ${e.message}", Toast.LENGTH_LONG).show()
+                            e.printStackTrace()
+                        }
                     }) {
                         Icon(Icons.Filled.PictureAsPdf, contentDescription = "Exportar Resumo Geral PDF")
                     }
@@ -124,8 +129,13 @@ fun ResultadosFeiraScreen(
                             Text("Agricultor Nº: ${resultadoAgricultor.agricultorId}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                             // Botão Exportar PDF Individual
                             IconButton(onClick = {
-                                val pdfFile = PdfGenerator.generateAgricultorPdf(context, resultadoAgricultor, resultadoGeralFeira.fairDetails)
-                                compartilharPdf(pdfFile, resultadoGeralFeira.fairDetails.feiraId, "Relatório Agricultor ${resultadoAgricultor.agricultorId} Feira ${resultadoGeralFeira.fairDetails.feiraId}")
+                                try {
+                                    val pdfFile = PdfGenerator.generateAgricultorPdf(context, resultadoAgricultor, resultadoGeralFeira.fairDetails)
+                                    compartilharPdf(pdfFile, resultadoGeralFeira.fairDetails.feiraId, "Relatório Agricultor ${resultadoAgricultor.agricultorId} Feira ${resultadoGeralFeira.fairDetails.feiraId}")
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Erro ao gerar PDF do Agricultor: ${e.message}", Toast.LENGTH_LONG).show()
+                                    e.printStackTrace()
+                                }
                             }) {
                                 Icon(Icons.Filled.PictureAsPdf, contentDescription = "Exportar PDF Agricultor")
                             }
@@ -151,7 +161,6 @@ fun ResultadosFeiraScreen(
     }
 }
 
-// InfoLinha composable como antes
 @Composable
 fun InfoLinha(label: String, valor: String, isTotal: Boolean = false) {
     Row(

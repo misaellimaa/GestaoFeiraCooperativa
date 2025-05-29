@@ -6,29 +6,46 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavHostController // Importe NavHostController
-import androidx.compose.material.icons.Icons // Importe Icons
-import androidx.compose.material.icons.filled.ArrowBack // Importe ArrowBack Icon
-import androidx.compose.material.icons.filled.Save // Importe Save Icon
+import androidx.navigation.NavHostController
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.runtime.remember
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.*
+
+// <<< NOVO IMPORT: Precisa da definição de Agricultor >>>
+import com.example.gestaofeiracooperativa.Agricultor // Certifique-se que este é o caminho correto se estiver em DataModels.kt
 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GerenciarFeiraScreen(
     navController: NavHostController,
-    feiraDetails: FairDetails, // Detalhes da feira (ID, datas)
+    feiraDetails: FairDetails,
+    listaDeAgricultores: List<Agricultor>, // <<< NOVO PARÂMETRO: Lista de agricultores vinda do banco
     onNavigateToLancamentos: (agricultorId: String) -> Unit,
     onNavigateToPerdasTotais: () -> Unit,
     onNavigateToResultados: () -> Unit,
     onSalvarFeira: () -> Unit
 ) {
-    // Estado local para a seleção do agricultor para lançamento
     var agricultorIdSelecionado by remember { mutableStateOf("") }
-    val agricultoresDisponiveis = (1..28).map { it.toString() } // Exemplo, pode vir de outro lugar
+    // val agricultoresDisponiveis = (1..28).map { it.toString() } // <<< REMOVIDO: Usaremos listaDeAgricultores
     var expandedAgricultorDropdown by remember { mutableStateOf(false) }
+
+    // <<< NOVO: Lógica para encontrar o nome do agricultor selecionado para exibição >>>
+    val nomeDisplayAgricultorSelecionado = remember(agricultorIdSelecionado, listaDeAgricultores) {
+        if (agricultorIdSelecionado.isBlank()) {
+            "Selecione o Agricultor"
+        } else {
+            val agricultorEncontrado = listaDeAgricultores.find { it.id == agricultorIdSelecionado }
+            if (agricultorEncontrado != null) {
+                "ID: ${agricultorEncontrado.id} - ${agricultorEncontrado.nome}"
+            } else {
+                "Agricultor ID: $agricultorIdSelecionado (Nome não encontrado)" // Fallback se o ID não estiver na lista
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -40,7 +57,6 @@ fun GerenciarFeiraScreen(
                     }
                 },
                 actions = {
-                    // Botão Salvar Feira na TopAppBar
                     IconButton(onClick = onSalvarFeira) {
                         Icon(Icons.Filled.Save, contentDescription = "Salvar Feira")
                     }
@@ -54,7 +70,7 @@ fun GerenciarFeiraScreen(
                 .fillMaxSize()
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp) // Espaçamento entre os blocos
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text("Gerenciar Feira", style = MaterialTheme.typography.titleLarge)
             Text(
@@ -64,7 +80,6 @@ fun GerenciarFeiraScreen(
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
-            // --- Seção de Lançamento de Entradas ---
             Card(elevation = CardDefaults.cardElevation(4.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Entradas de Produtos", style = MaterialTheme.typography.titleSmall)
@@ -77,7 +92,7 @@ fun GerenciarFeiraScreen(
                         OutlinedTextField(
                             modifier = Modifier.menuAnchor().fillMaxWidth(),
                             readOnly = true,
-                            value = if (agricultorIdSelecionado.isNotEmpty()) "Agricultor Nº $agricultorIdSelecionado" else "Selecione o Agricultor",
+                            value = nomeDisplayAgricultorSelecionado, // <<< ALTERAÇÃO: Mostra ID e Nome (ou fallback)
                             onValueChange = {},
                             label = { Text("Agricultor para Lançar Entradas") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedAgricultorDropdown) }
@@ -86,14 +101,24 @@ fun GerenciarFeiraScreen(
                             expanded = expandedAgricultorDropdown,
                             onDismissRequest = { expandedAgricultorDropdown = false }
                         ) {
-                            agricultoresDisponiveis.forEach { id ->
+                            // <<< ALTERAÇÃO: Itera sobre listaDeAgricultores real >>>
+                            if (listaDeAgricultores.isEmpty()) {
                                 DropdownMenuItem(
-                                    text = { Text("Agricultor Nº $id") },
-                                    onClick = {
-                                        agricultorIdSelecionado = id
-                                        expandedAgricultorDropdown = false
-                                    }
+                                    text = { Text("Nenhum agricultor cadastrado") },
+                                    onClick = { expandedAgricultorDropdown = false },
+                                    enabled = false
                                 )
+                            } else {
+                                listaDeAgricultores.forEach { agricultor ->
+                                    DropdownMenuItem(
+                                        // <<< ALTERAÇÃO: Mostra ID e Nome do agricultor >>>
+                                        text = { Text("ID: ${agricultor.id} - ${agricultor.nome}") },
+                                        onClick = {
+                                            agricultorIdSelecionado = agricultor.id
+                                            expandedAgricultorDropdown = false
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -103,6 +128,7 @@ fun GerenciarFeiraScreen(
                                 onNavigateToLancamentos(agricultorIdSelecionado)
                             } else {
                                 // TODO: Mostrar Toast/Snackbar "Selecione um agricultor!"
+                                // (Você pode adicionar um Toast aqui)
                             }
                         },
                         enabled = agricultorIdSelecionado.isNotBlank(),
@@ -115,7 +141,6 @@ fun GerenciarFeiraScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // --- Seção de Lançamento de Perdas ---
             Card(elevation = CardDefaults.cardElevation(4.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Perdas Totais da Feira", style = MaterialTheme.typography.titleSmall)
@@ -130,7 +155,6 @@ fun GerenciarFeiraScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // --- Seção de Resultados ---
             Card(elevation = CardDefaults.cardElevation(4.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Resultados da Feira", style = MaterialTheme.typography.titleSmall)
@@ -142,10 +166,6 @@ fun GerenciarFeiraScreen(
                     }
                 }
             }
-            // TODO: Botão para Exportar PDF aqui no futuro
-            // Spacer(modifier = Modifier.height(16.dp))
-            // Button(onClick = { /* Exportar PDF */ }, modifier = Modifier.fillMaxWidth()) { Text("Exportar PDF") }
-
         }
     }
 }
