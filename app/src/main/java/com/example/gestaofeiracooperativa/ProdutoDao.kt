@@ -11,16 +11,20 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ProdutoDao {
 
-    @Query("SELECT * FROM produtos ORDER BY item COLLATE NOCASE ASC")
+    // <<< ALTERAÇÃO: Ordenar por número (numericamente) >>>
+    @Query("SELECT * FROM produtos ORDER BY CAST(numero AS INTEGER) ASC")
     fun getAllProducts(): Flow<List<Produto>>
 
-    @Query("SELECT * FROM produtos WHERE numero LIKE :query || '%' OR item LIKE '%' || :query || '%' ORDER BY item COLLATE NOCASE ASC")
+    // <<< ALTERAÇÃO: Ordenar busca também por número, depois por item >>>
+    @Query("SELECT * FROM produtos WHERE numero LIKE :query || '%' OR item LIKE '%' || :query || '%' ORDER BY CAST(numero AS INTEGER) ASC, item COLLATE NOCASE ASC")
     fun searchProducts(query: String): Flow<List<Produto>>
 
     @Query("SELECT * FROM produtos WHERE numero = :numero LIMIT 1")
     suspend fun getProductByNumber(numero: String): Produto?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    // <<< ALTERAÇÃO: Mudar estratégia de conflito para ABORT na inserção individual >>>
+    // Isso fará com que uma tentativa de inserir um 'numero' duplicado lance uma exceção.
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(produto: Produto)
 
     @Update
@@ -29,6 +33,8 @@ interface ProdutoDao {
     @Delete
     suspend fun delete(produto: Produto)
 
+    // Manter REPLACE para insertAll pode ser útil para a carga inicial do CSV,
+    // onde a intenção pode ser sobrescrever.
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(produtos: List<Produto>)
 

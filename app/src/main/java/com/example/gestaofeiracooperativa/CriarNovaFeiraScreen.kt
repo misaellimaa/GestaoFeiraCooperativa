@@ -8,8 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.DateRange // Ícone para o DatePicker
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,14 +19,15 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
 import java.util.Locale
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CriarNovaFeiraScreen(
     navController: NavHostController,
-    onConfirmarCriacaoFeira: (feiraId: String, startDate: String, endDate: String) -> Unit // Callback para criar nova feira
+    onConfirmarCriacaoFeira: (feiraId: String, startDate: String, endDate: String) -> Unit
 ) {
     var feiraIdInput by remember { mutableStateOf("") }
     var startDateInput by remember { mutableStateOf("") }
@@ -36,7 +36,6 @@ fun CriarNovaFeiraScreen(
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
 
-    // DatePicker para data de início
     val startDatePickerDialog = DatePickerDialog(
         context,
         { _: DatePicker, year: Int, month: Int, dayOfMonth: Int ->
@@ -49,7 +48,6 @@ fun CriarNovaFeiraScreen(
         calendar.get(Calendar.DAY_OF_MONTH)
     )
 
-    // DatePicker para data de fim
     val endDatePickerDialog = DatePickerDialog(
         context,
         { _: DatePicker, year: Int, month: Int, dayOfMonth: Int ->
@@ -64,13 +62,12 @@ fun CriarNovaFeiraScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Criar Nova Feira") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) { // Volta para a HomeScreen
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Voltar")
-                    }
-                }
+            // <<< ALTERAÇÃO AQUI: Usando o StandardTopAppBar >>>
+            StandardTopAppBar(
+                title = "Criar Nova Feira",
+                canNavigateBack = true, // Esta tela tem um botão de voltar
+                onNavigateBack = { navController.popBackStack() }
+                // Nenhuma 'action' específica para esta TopAppBar, então o padrão (vazio) será usado.
             )
         }
     ) { innerPadding ->
@@ -90,19 +87,18 @@ fun CriarNovaFeiraScreen(
 
             OutlinedTextField(
                 value = feiraIdInput,
-                onValueChange = { feiraIdInput = it.filter { char -> char.isDigit() } }, // Permite apenas dígitos
+                onValueChange = { feiraIdInput = it.filter { char -> char.isDigit() } },
                 label = { Text("Número da Feira (ex: 20)") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // Campo para Data de Início
             OutlinedTextField(
                 value = startDateInput,
-                onValueChange = { startDateInput = it }, // onValueChange para permitir colagem ou auto-preenchimento
+                onValueChange = { /* Mantido, mas readOnly=true */ },
                 label = { Text("Data de Início (DD/MM/AAAA)") },
-                readOnly = true, // Não permite digitar diretamente, apenas via DatePicker
+                readOnly = true,
                 trailingIcon = {
                     IconButton(onClick = { startDatePickerDialog.show() }) {
                         Icon(Icons.Filled.DateRange, contentDescription = "Selecionar Data de Início")
@@ -111,12 +107,11 @@ fun CriarNovaFeiraScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // Campo para Data de Fim
             OutlinedTextField(
                 value = endDateInput,
-                onValueChange = { endDateInput = it }, // onValueChange para permitir colagem ou auto-preenchimento
+                onValueChange = { /* Mantido, mas readOnly=true */ },
                 label = { Text("Data de Fim (DD/MM/AAAA)") },
-                readOnly = true, // Não permite digitar diretamente, apenas via DatePicker
+                readOnly = true,
                 trailingIcon = {
                     IconButton(onClick = { endDatePickerDialog.show() }) {
                         Icon(Icons.Filled.DateRange, contentDescription = "Selecionar Data de Fim")
@@ -128,13 +123,16 @@ fun CriarNovaFeiraScreen(
             Button(
                 onClick = {
                     if (feiraIdInput.isNotBlank() && startDateInput.isNotBlank() && endDateInput.isNotBlank()) {
-                        // Opcional: Validar se as datas são válidas e se a data de fim é depois da de início
                         val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
                         try {
                             val start = dateFormat.parse(startDateInput)
                             val end = dateFormat.parse(endDateInput)
+                            // Adicionada verificação para start e end não serem nulos antes de before()
                             if (start != null && end != null && end.before(start)) {
                                 Toast.makeText(context, "A data de fim não pode ser antes da data de início.", Toast.LENGTH_LONG).show()
+                                return@Button
+                            } else if (start == null || end == null) {
+                                Toast.makeText(context, "Formato de data inválido. Use DD/MM/AAAA.", Toast.LENGTH_LONG).show()
                                 return@Button
                             }
                         } catch (e: Exception) {
@@ -143,7 +141,6 @@ fun CriarNovaFeiraScreen(
                         }
 
                         onConfirmarCriacaoFeira(feiraIdInput, startDateInput, endDateInput)
-                        // A navegação será feita pelo AppNavigation após confirmar a criação
                     } else {
                         Toast.makeText(context, "Preencha todos os campos.", Toast.LENGTH_SHORT).show()
                     }

@@ -1,10 +1,10 @@
-package com.example.gestaofeiracooperativa // <<--- MUDE PARA O SEU PACKAGE REAL
+package com.example.gestaofeiracooperativa
 
+import android.util.Log
 import android.widget.Toast
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.items // Certifique-se que este import está correto
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Warning // <<< NOVO IMPORT para o ícone do diálogo
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.firstOrNull
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,11 +34,12 @@ fun CadastroProdutosScreen(
     produtoViewModel: CadastroProdutosViewModel = viewModel(
         factory = CadastroProdutosViewModelFactory(
             (LocalContext.current.applicationContext as MyApplication).produtoRepository
+            // Presumindo que você tem um MyApplication e ProdutoRepository configurados para DI
         )
     )
 ) {
     val context = LocalContext.current
-    val produtos by produtoViewModel.produtos.collectAsState()
+    val produtos by produtoViewModel.produtos.collectAsState() // Já deve vir ordenado do DAO
     val searchQuery by produtoViewModel.searchQuery.collectAsState()
 
     var editandoProduto by remember { mutableStateOf<Produto?>(null) }
@@ -48,18 +50,66 @@ fun CadastroProdutosScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Cadastro de Produtos") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Voltar")
+    // <<< NOVO: Estados para o diálogo de confirmação de exclusão >>>
+    var showConfirmDeleteDialog by remember { mutableStateOf(false) }
+    var produtoParaDeletar by remember { mutableStateOf<Produto?>(null) }
+
+    // <<< NOVO: AlertDialog para confirmar a exclusão >>>
+    if (showConfirmDeleteDialog && produtoParaDeletar != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showConfirmDeleteDialog = false
+                produtoParaDeletar = null
+            },
+            icon = { Icon(Icons.Default.Warning, contentDescription = "Aviso de Exclusão") },
+            title = { Text("Confirmar Deleção") },
+            text = { Text("Tem certeza que deseja deletar o produto '${produtoParaDeletar?.item ?: ""}' (Nº: ${produtoParaDeletar?.numero ?: ""})? Esta ação não pode ser desfeita.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        produtoParaDeletar?.let { prod ->
+                            coroutineScope.launch {
+                                try {
+                                    produtoViewModel.delete(prod)
+                                    Toast.makeText(context, "Produto ${prod.item} deletado!", Toast.LENGTH_SHORT).show()
+                                    if (editandoProduto?.numero == prod.numero) { // Se o produto deletado era o que estava em edição
+                                        editandoProduto = null
+                                        numeroInput = ""
+                                        itemInput = ""
+                                        unidadeInput = ""
+                                        valorInput = ""
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("CadastroProdutos", "Erro ao deletar produto ${prod.numero}", e)
+                                    Toast.makeText(context, "Erro ao deletar produto.", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                        showConfirmDeleteDialog = false
+                        produtoParaDeletar = null
                     }
-                }
+                ) { Text("Deletar") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showConfirmDeleteDialog = false
+                        produtoParaDeletar = null
+                    }
+                ) { Text("Cancelar") }
+            }
+        )
+    }
+
+    Scaffold(
+        topBar = { /* ... (TopAppBar como antes) ... */
+            StandardTopAppBar(
+                title = "Cadastro de Produtos",
+                canNavigateBack = true,
+                onNavigateBack = { navController.navigateUp() }
             )
         },
-        floatingActionButton = {
+        floatingActionButton = { /* ... (FAB como antes) ... */
             FloatingActionButton(onClick = {
                 editandoProduto = null
                 numeroInput = ""
@@ -81,6 +131,7 @@ fun CadastroProdutosScreen(
         ) {
             Card(elevation = CardDefaults.cardElevation(4.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // ... (Text "Editar/Adicionar", OutlinedTextFields como antes) ...
                     Text(
                         if (editandoProduto != null) "Editar Produto Existente" else "Adicionar Novo Produto",
                         style = MaterialTheme.typography.titleSmall
@@ -88,7 +139,7 @@ fun CadastroProdutosScreen(
 
                     OutlinedTextField(
                         value = numeroInput,
-                        onValueChange = { numeroInput = it },
+                        onValueChange = { numeroInput = it.filter { char -> char.isDigit() } }, // Permite apenas dígitos para número
                         label = { Text("Número do Produto") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
@@ -118,35 +169,53 @@ fun CadastroProdutosScreen(
                             }
                         },
                         label = { Text("Valor p/ Unidade (Ex: 10,50)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), // Mudado para Decimal
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+
 
                     Button(
                         onClick = {
                             val valorFormatado = valorInput.replace(',', '.').toDoubleOrNull()
                             if (numeroInput.isNotBlank() && itemInput.isNotBlank() && unidadeInput.isNotBlank() && valorFormatado != null) {
-                                val produto = Produto(numeroInput, itemInput, unidadeInput, valorFormatado)
+                                val produtoParaSalvar = Produto(numeroInput, itemInput, unidadeInput, valorFormatado)
                                 coroutineScope.launch {
-                                    val existingProduct = produtoViewModel.getProductByNumber(numeroInput)
-                                    if (editandoProduto != null) {
-                                        produtoViewModel.update(produto)
-                                        Toast.makeText(context, "Produto ${produto.item} atualizado!", Toast.LENGTH_SHORT).show()
-                                    } else {
+                                    if (editandoProduto != null) { // Modo de Edição
+                                        try {
+                                            produtoViewModel.update(produtoParaSalvar)
+                                            Toast.makeText(context, "Produto ${produtoParaSalvar.item} atualizado!", Toast.LENGTH_SHORT).show()
+                                            editandoProduto = null
+                                            numeroInput = ""
+                                            itemInput = ""
+                                            unidadeInput = ""
+                                            valorInput = ""
+                                        } catch (e: Exception) {
+                                            Log.e("CadastroProdutos", "Erro ao ATUALIZAR produto: ${produtoParaSalvar.numero}", e)
+                                            Toast.makeText(context, "Erro ao atualizar produto.", Toast.LENGTH_LONG).show()
+                                        }
+                                    } else { // Modo de Adição
+                                        val existingProduct = produtoViewModel.getProductByNumber(numeroInput)
                                         if (existingProduct != null) {
-                                            Toast.makeText(context, "Produto com número ${produto.numero} já existe.", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "Produto com número ${produtoParaSalvar.numero} já existe. Não foi adicionado.", Toast.LENGTH_LONG).show()
                                         } else {
-                                            produtoViewModel.insert(produto)
-                                            Toast.makeText(context, "Produto ${produto.item} adicionado!", Toast.LENGTH_SHORT).show()
+                                            try {
+                                                produtoViewModel.insert(produtoParaSalvar)
+                                                Toast.makeText(context, "Produto ${produtoParaSalvar.item} adicionado!", Toast.LENGTH_SHORT).show()
+                                                numeroInput = ""
+                                                itemInput = ""
+                                                unidadeInput = ""
+                                                valorInput = ""
+                                            } catch (e: android.database.sqlite.SQLiteConstraintException) {
+                                                Log.e("CadastroProdutos", "Erro de CONSTRAIN ao INSERIR produto (numero duplicado?): ${produtoParaSalvar.numero}", e)
+                                                Toast.makeText(context, "Erro: Número de produto '${produtoParaSalvar.numero}' já existe no banco.", Toast.LENGTH_LONG).show()
+                                            } catch (e: Exception) {
+                                                Log.e("CadastroProdutos", "Erro GERAL ao INSERIR produto: ${produtoParaSalvar.numero}", e)
+                                                Toast.makeText(context, "Erro ao adicionar produto.", Toast.LENGTH_LONG).show()
+                                            }
                                         }
                                     }
                                 }
-                                editandoProduto = null
-                                numeroInput = ""
-                                itemInput = ""
-                                unidadeInput = ""
-                                valorInput = ""
                             } else {
                                 Toast.makeText(context, "Preencha todos os campos e use um valor válido.", Toast.LENGTH_SHORT).show()
                             }
@@ -164,7 +233,7 @@ fun CadastroProdutosScreen(
                             unidadeInput = ""
                             valorInput = ""
                         }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Cancelar")
+                            Text("Cancelar Edição")
                         }
                     }
                 }
@@ -172,10 +241,10 @@ fun CadastroProdutosScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            OutlinedTextField(
+            OutlinedTextField( // Barra de busca como antes
                 value = searchQuery,
                 onValueChange = { produtoViewModel.updateSearchQuery(it) },
-                label = { Text("Buscar Produtos") },
+                label = { Text("Buscar Produtos por Nome ou Número") }, // Label ajustado
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -187,10 +256,10 @@ fun CadastroProdutosScreen(
             if (produtos.isEmpty() && searchQuery.isBlank()) {
                 Text("Nenhum produto cadastrado ainda.")
             } else if (produtos.isEmpty() && searchQuery.isNotBlank()) {
-                Text("Nenhum produto encontrado para a busca.")
+                Text("Nenhum produto encontrado para \"$searchQuery\".")
             } else {
                 LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
-                    items(produtos) { produto ->
+                    items(produtos, key = {it.numero} ) { produto -> // Adicionada key para performance
                         Card(elevation = CardDefaults.cardElevation(2.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                             Row(
                                 modifier = Modifier
@@ -201,7 +270,7 @@ fun CadastroProdutosScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text("${produto.item} (#${produto.numero})", fontWeight = FontWeight.Bold)
-                                    Text("Unidade: ${produto.unidade} | Valor: R$ ${"%.2f".format(produto.valorUnidade)}")
+                                    Text("Unid: ${produto.unidade} | Valor: R$ ${String.format(Locale.getDefault(),"%.2f", produto.valorUnidade).replace('.',',')}") // Formatação com vírgula
                                 }
                                 Row {
                                     IconButton(onClick = {
@@ -209,17 +278,17 @@ fun CadastroProdutosScreen(
                                         numeroInput = produto.numero
                                         itemInput = produto.item
                                         unidadeInput = produto.unidade
-                                        valorInput = produto.valorUnidade.toString().replace('.', ',')
+                                        valorInput = produto.valorUnidade.toString().replace('.', ',') // Usa vírgula para edição
                                     }) {
-                                        Icon(Icons.Default.Edit, contentDescription = "Editar")
+                                        Icon(Icons.Default.Edit, contentDescription = "Editar ${produto.item}")
                                     }
+                                    // <<< ALTERAÇÃO: Botão de excluir agora mostra o diálogo >>>
                                     IconButton(onClick = {
-                                        coroutineScope.launch {
-                                            produtoViewModel.delete(produto)
-                                            Toast.makeText(context, "Produto ${produto.item} deletado!", Toast.LENGTH_SHORT).show()
-                                        }
+                                        produtoParaDeletar = produto
+                                        showConfirmDeleteDialog = true
                                     }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Deletar")
+                                        // <<< ALTERAÇÃO: Cor do ícone de lixeira >>>
+                                        Icon(Icons.Default.Delete, contentDescription = "Deletar ${produto.item}", tint = MaterialTheme.colorScheme.error)
                                     }
                                 }
                             }

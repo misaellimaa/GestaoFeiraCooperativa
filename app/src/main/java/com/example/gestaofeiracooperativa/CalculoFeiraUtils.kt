@@ -6,11 +6,10 @@ package com.example.gestaofeiracooperativa
 // devem estar definidas em DataModels.kt
 
 fun calcularResultadosFeira(
-    // MUDANÇA AQUI: Recebe o objeto FairDetails completo
     fairDetails: FairDetails,
     entradasTodosAgricultores: Map<String, List<EntradaItemAgricultor>>,
     perdasTotaisDaFeira: List<PerdaItemFeira>,
-    catalogoProdutos: List<Produto>
+    catalogoProdutos: List<Produto> // Lembre-se que esta lista pode precisar vir do banco para ter valores atualizados
 ): ResultadoGeralFeira {
 
     val resultadosPorAgricultor = mutableListOf<ResultadoAgricultorFeira>()
@@ -18,73 +17,75 @@ fun calcularResultadosFeira(
     var acumuladoTotalGeralCooperativa = 0.0
     var acumuladoTotalGeralAgricultores = 0.0
 
-    // 1. Criar um mapa de perdas TOTAIS NA SEMANA por ID de produto para fácil acesso
     val mapaPerdasSemanaPorProdutoId = perdasTotaisDaFeira.associate {
         it.produto.numero to it.getTotalPerdidoNaSemana()
     }
 
-    // 2. Calcular a quantidade total entregue NA SEMANA de cada produto por TODOS os agricultores
     val mapaTotalEntregueSemanaPorProdutoId = mutableMapOf<String, Double>()
     entradasTodosAgricultores.values.flatten().forEach { entradaItem ->
         val totalAtualProduto = mapaTotalEntregueSemanaPorProdutoId.getOrDefault(entradaItem.produto.numero, 0.0)
         mapaTotalEntregueSemanaPorProdutoId[entradaItem.produto.numero] = totalAtualProduto + entradaItem.getTotalEntregueNaSemana()
     }
 
-    // 3. Processar cada agricultor
     entradasTodosAgricultores.forEach { (agricultorId, listaDeEntradasDoAgricultor) ->
-        val itensProcessadosParaEsteAgricultor = mutableListOf<ItemProcessadoAgricultor>()
-        var subTotalVendidoBrutoAgricultor = 0.0
+        // <<< ALTERAÇÃO AQUI: Processa o agricultor apenas se ele tiver entradas >>>
+        if (listaDeEntradasDoAgricultor.isNotEmpty()) {
+            val itensProcessadosParaEsteAgricultor = mutableListOf<ItemProcessadoAgricultor>()
+            var subTotalVendidoBrutoAgricultor = 0.0
 
-        listaDeEntradasDoAgricultor.forEach { entradaItemDoAgricultor ->
-            val produto = entradaItemDoAgricultor.produto
-            val quantidadeEntreguePeloAgricultorParaEsteProdutoSemana = entradaItemDoAgricultor.getTotalEntregueNaSemana()
+            listaDeEntradasDoAgricultor.forEach { entradaItemDoAgricultor ->
+                val produto = entradaItemDoAgricultor.produto
+                val quantidadeEntreguePeloAgricultorParaEsteProdutoSemana = entradaItemDoAgricultor.getTotalEntregueNaSemana()
+                val perdaTotalDoProdutoNaFeiraSemana = mapaPerdasSemanaPorProdutoId[produto.numero] ?: 0.0
+                val quantidadeTotalEntregueDoProdutoPorTodosSemana = mapaTotalEntregueSemanaPorProdutoId[produto.numero] ?: 0.0
+                var perdaAlocadaParaEsteItem = 0.0
 
-            val perdaTotalDoProdutoNaFeiraSemana = mapaPerdasSemanaPorProdutoId[produto.numero] ?: 0.0
-            val quantidadeTotalEntregueDoProdutoPorTodosSemana = mapaTotalEntregueSemanaPorProdutoId[produto.numero] ?: 0.0
+                if (quantidadeTotalEntregueDoProdutoPorTodosSemana > 0 && quantidadeEntreguePeloAgricultorParaEsteProdutoSemana > 0) {
+                    perdaAlocadaParaEsteItem = (quantidadeEntreguePeloAgricultorParaEsteProdutoSemana / quantidadeTotalEntregueDoProdutoPorTodosSemana) * perdaTotalDoProdutoNaFeiraSemana
+                }
 
-            var perdaAlocadaParaEsteItem = 0.0
-            if (quantidadeTotalEntregueDoProdutoPorTodosSemana > 0 && quantidadeEntreguePeloAgricultorParaEsteProdutoSemana > 0) {
-                perdaAlocadaParaEsteItem = (quantidadeEntreguePeloAgricultorParaEsteProdutoSemana / quantidadeTotalEntregueDoProdutoPorTodosSemana) * perdaTotalDoProdutoNaFeiraSemana
+                perdaAlocadaParaEsteItem = perdaAlocadaParaEsteItem.coerceAtMost(quantidadeEntreguePeloAgricultorParaEsteProdutoSemana)
+
+                val quantidadeVendida = (quantidadeEntreguePeloAgricultorParaEsteProdutoSemana - perdaAlocadaParaEsteItem).coerceAtLeast(0.0)
+                val valorUnitario = produto.valorUnidade // ATENÇÃO: Este valor virá da lista 'catalogoProdutos'
+                // que pode estar usando o CSV original, não o valor atualizado do produto no banco.
+                // Para usar o valor atualizado, 'catalogoProdutos' deveria ser 'todosOsProdutosState'
+                // e você buscaria o produto daqui para pegar o valorUnitario mais recente.
+                val valorTotalVendidoItem = quantidadeVendida * valorUnitario
+
+                itensProcessadosParaEsteAgricultor.add(
+                    ItemProcessadoAgricultor(
+                        produto = produto, // Este objeto Produto vem das entradas, pode ter valorUnitario desatualizado
+                        quantidadeEntregueTotalSemana = quantidadeEntreguePeloAgricultorParaEsteProdutoSemana,
+                        quantidadePerdaAlocada = perdaAlocadaParaEsteItem,
+                        quantidadeVendida = quantidadeVendida,
+                        valorTotalVendido = valorTotalVendidoItem
+                    )
+                )
+                subTotalVendidoBrutoAgricultor += valorTotalVendidoItem
             }
 
-            perdaAlocadaParaEsteItem = perdaAlocadaParaEsteItem.coerceAtMost(quantidadeEntreguePeloAgricultorParaEsteProdutoSemana)
+            val valorCooperativa = subTotalVendidoBrutoAgricultor * 0.30 // Exemplo: 30% para cooperativa
+            val valorLiquidoAgricultor = subTotalVendidoBrutoAgricultor * 0.70 // Exemplo: 70% para agricultor
 
-            val quantidadeVendida = (quantidadeEntreguePeloAgricultorParaEsteProdutoSemana - perdaAlocadaParaEsteItem).coerceAtLeast(0.0)
-            val valorUnitario = produto.valorUnidade
-            val valorTotalVendidoItem = quantidadeVendida * valorUnitario
-
-            itensProcessadosParaEsteAgricultor.add(
-                ItemProcessadoAgricultor(
-                    produto = produto,
-                    quantidadeEntregueTotalSemana = quantidadeEntreguePeloAgricultorParaEsteProdutoSemana,
-                    quantidadePerdaAlocada = perdaAlocadaParaEsteItem,
-                    quantidadeVendida = quantidadeVendida,
-                    valorTotalVendido = valorTotalVendidoItem
+            resultadosPorAgricultor.add(
+                ResultadoAgricultorFeira(
+                    agricultorId = agricultorId,
+                    itensProcessados = itensProcessadosParaEsteAgricultor,
+                    totalVendidoBrutoAgricultor = subTotalVendidoBrutoAgricultor,
+                    valorCooperativa = valorCooperativa,
+                    valorLiquidoAgricultor = valorLiquidoAgricultor
                 )
             )
-            subTotalVendidoBrutoAgricultor += valorTotalVendidoItem
+
+            acumuladoTotalGeralVendido += subTotalVendidoBrutoAgricultor
+            acumuladoTotalGeralCooperativa += valorCooperativa
+            acumuladoTotalGeralAgricultores += valorLiquidoAgricultor
         }
-
-        val valorCooperativa = subTotalVendidoBrutoAgricultor * 0.30
-        val valorLiquidoAgricultor = subTotalVendidoBrutoAgricultor * 0.70
-
-        resultadosPorAgricultor.add(
-            ResultadoAgricultorFeira(
-                agricultorId = agricultorId,
-                itensProcessados = itensProcessadosParaEsteAgricultor,
-                totalVendidoBrutoAgricultor = subTotalVendidoBrutoAgricultor,
-                valorCooperativa = valorCooperativa,
-                valorLiquidoAgricultor = valorLiquidoAgricultor
-            )
-        )
-
-        acumuladoTotalGeralVendido += subTotalVendidoBrutoAgricultor
-        acumuladoTotalGeralCooperativa += valorCooperativa
-        acumuladoTotalGeralAgricultores += valorLiquidoAgricultor
     }
 
     return ResultadoGeralFeira(
-        fairDetails = fairDetails, // <<--- MUDANÇA AQUI: Passa o objeto FairDetails
+        fairDetails = fairDetails,
         resultadosPorAgricultor = resultadosPorAgricultor,
         totalGeralVendido = acumuladoTotalGeralVendido,
         totalGeralCooperativa = acumuladoTotalGeralCooperativa,

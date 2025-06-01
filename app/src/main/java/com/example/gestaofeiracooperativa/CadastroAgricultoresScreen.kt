@@ -1,5 +1,6 @@
-package com.example.gestaofeiracooperativa // <<--- MUDE PARA O SEU PACKAGE REAL
+package com.example.gestaofeiracooperativa
 
+import android.util.Log // Para Log.e
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -13,6 +14,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Warning // <<< NOVO IMPORT para o ícone do diálogo
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,10 +23,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavHostController // Import para NavHostController
-import androidx.lifecycle.viewmodel.compose.viewModel // Import para viewModel()
-import kotlinx.coroutines.launch // Import para coroutineScope.launch
-import kotlinx.coroutines.flow.firstOrNull // Import para firstOrNull
+import androidx.navigation.NavHostController
+import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,7 +39,7 @@ fun CadastroAgricultoresScreen(
     )
 ) {
     val context = LocalContext.current
-    val agricultores by agricultorViewModel.agricultores.collectAsState()
+    val agricultores by agricultorViewModel.agricultores.collectAsState() // Esta lista já deve vir ordenada do DAO
     val searchQuery by agricultorViewModel.searchQuery.collectAsState()
 
     var editandoAgricultor by remember { mutableStateOf<Agricultor?>(null) }
@@ -46,15 +48,58 @@ fun CadastroAgricultoresScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
+    // <<< NOVO: Estados para o diálogo de confirmação de exclusão >>>
+    var showConfirmDeleteDialog by remember { mutableStateOf(false) }
+    var agricultorParaDeletar by remember { mutableStateOf<Agricultor?>(null) }
+
+
+    // <<< NOVO: AlertDialog para confirmar a exclusão >>>
+    if (showConfirmDeleteDialog && agricultorParaDeletar != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showConfirmDeleteDialog = false
+                agricultorParaDeletar = null
+            },
+            icon = { Icon(Icons.Default.Warning, contentDescription = "Aviso de Exclusão") },
+            title = { Text("Confirmar Deleção") },
+            text = { Text("Tem certeza que deseja deletar o agricultor '${agricultorParaDeletar?.nome ?: ""}' (ID: ${agricultorParaDeletar?.id ?: ""})? Esta ação não pode ser desfeita.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        agricultorParaDeletar?.let { agr ->
+                            coroutineScope.launch {
+                                try {
+                                    agricultorViewModel.delete(agr)
+                                    Toast.makeText(context, "Agricultor ${agr.nome} deletado!", Toast.LENGTH_SHORT).show()
+                                } catch (e: Exception) {
+                                    Log.e("CadastroAgricultores", "Erro ao deletar agricultor ${agr.id}", e)
+                                    Toast.makeText(context, "Erro ao deletar agricultor.", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                        showConfirmDeleteDialog = false
+                        agricultorParaDeletar = null
+                    }
+                ) { Text("Deletar") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showConfirmDeleteDialog = false
+                        agricultorParaDeletar = null
+                    }
+                ) { Text("Cancelar") }
+            }
+        )
+    }
+
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Cadastro de Agricultores") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Voltar")
-                    }
-                }
+            StandardTopAppBar(
+                title = "Cadastro de Agricultores",
+                canNavigateBack = true,
+                onNavigateBack = { navController.navigateUp() }
             )
         },
         floatingActionButton = {
@@ -84,11 +129,11 @@ fun CadastroAgricultoresScreen(
 
                     OutlinedTextField(
                         value = idInput,
-                        onValueChange = { idInput = it.filter { char -> char.isDigit() } }, // ID é geralmente numérico
-                        label = { Text("ID do Agricultor") },
+                        onValueChange = { idInput = it.filter { char -> char.isDigit() } },
+                        label = { Text("ID do Agricultor (Ex: 1, 28)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
-                        readOnly = editandoAgricultor != null, // Não permite mudar o ID ao editar
+                        readOnly = editandoAgricultor != null,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
@@ -102,24 +147,42 @@ fun CadastroAgricultoresScreen(
                     Button(
                         onClick = {
                             if (idInput.isNotBlank() && nomeInput.isNotBlank()) {
-                                val agricultor = Agricultor(idInput, nomeInput)
+                                val agricultorParaSalvar = Agricultor(idInput, nomeInput)
                                 coroutineScope.launch {
-                                    val existingAgricultor = agricultorViewModel.getAgricultorById(idInput)
                                     if (editandoAgricultor != null) { // Modo de edição
-                                        agricultorViewModel.update(agricultor)
-                                        Toast.makeText(context, "Agricultor ${agricultor.nome} atualizado!", Toast.LENGTH_SHORT).show()
+                                        try {
+                                            agricultorViewModel.update(agricultorParaSalvar)
+                                            Toast.makeText(context, "Agricultor ${agricultorParaSalvar.nome} atualizado!", Toast.LENGTH_SHORT).show()
+                                            editandoAgricultor = null // Limpa campos após sucesso
+                                            idInput = ""
+                                            nomeInput = ""
+                                        } catch (e: Exception) {
+                                            Log.e("CadastroAgricultores", "Erro ao ATUALIZAR agricultor: ${agricultorParaSalvar.id}", e)
+                                            Toast.makeText(context, "Erro ao atualizar agricultor. Verifique os logs.", Toast.LENGTH_LONG).show()
+                                        }
                                     } else { // Modo de adição
+                                        val existingAgricultor = agricultorViewModel.getAgricultorById(idInput)
                                         if (existingAgricultor != null) {
-                                            Toast.makeText(context, "Agricultor com ID ${agricultor.id} já existe.", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "Agricultor com ID ${agricultorParaSalvar.id} já existe. Não foi adicionado.", Toast.LENGTH_LONG).show()
                                         } else {
-                                            agricultorViewModel.insert(agricultor)
-                                            Toast.makeText(context, "Agricultor ${agricultor.nome} adicionado!", Toast.LENGTH_SHORT).show()
+                                            // <<< ALTERAÇÃO: Adicionar try-catch para o insert >>>
+                                            try {
+                                                agricultorViewModel.insert(agricultorParaSalvar)
+                                                Toast.makeText(context, "Agricultor ${agricultorParaSalvar.nome} adicionado!", Toast.LENGTH_SHORT).show()
+                                                idInput = "" // Limpa campos após sucesso
+                                                nomeInput = ""
+                                                // editandoAgricultor já é null
+                                            } catch (e: android.database.sqlite.SQLiteConstraintException) {
+                                                Log.e("CadastroAgricultores", "Erro de CONSTRAIN ao INSERIR agricultor (ID duplicado?): ${agricultorParaSalvar.id}", e)
+                                                Toast.makeText(context, "Erro: ID de agricultor '${agricultorParaSalvar.id}' já existe no banco.", Toast.LENGTH_LONG).show()
+                                            } catch (e: Exception) {
+                                                Log.e("CadastroAgricultores", "Erro GERAL ao INSERIR agricultor: ${agricultorParaSalvar.id}", e)
+                                                Toast.makeText(context, "Erro ao adicionar agricultor. Verifique os logs.", Toast.LENGTH_LONG).show()
+                                            }
                                         }
                                     }
                                 }
-                                editandoAgricultor = null
-                                idInput = ""
-                                nomeInput = ""
+                                // A limpeza de campos foi movida para dentro dos blocos de sucesso/lógica do FAB
                             } else {
                                 Toast.makeText(context, "Preencha todos os campos.", Toast.LENGTH_SHORT).show()
                             }
@@ -130,12 +193,12 @@ fun CadastroAgricultoresScreen(
                         Text(if (editandoAgricultor != null) "Atualizar Agricultor" else "Adicionar Agricultor")
                     }
                     if (editandoAgricultor != null) {
-                        Button(onClick = {
+                        Button(onClick = { // Botão Cancelar Edição
                             editandoAgricultor = null
                             idInput = ""
                             nomeInput = ""
                         }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Cancelar")
+                            Text("Cancelar Edição")
                         }
                     }
                 }
@@ -146,7 +209,7 @@ fun CadastroAgricultoresScreen(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { agricultorViewModel.updateSearchQuery(it) },
-                label = { Text("Buscar Agricultores") },
+                label = { Text("Buscar Agricultores por ID ou Nome") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -158,10 +221,10 @@ fun CadastroAgricultoresScreen(
             if (agricultores.isEmpty() && searchQuery.isBlank()) {
                 Text("Nenhum agricultor cadastrado ainda.")
             } else if (agricultores.isEmpty() && searchQuery.isNotBlank()) {
-                Text("Nenhum agricultor encontrado para a busca.")
+                Text("Nenhum agricultor encontrado para \"$searchQuery\".")
             } else {
-                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
-                    items(agricultores) { agricultor ->
+                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)) { // Define uma altura máxima para a lista se necessário
+                    items(agricultores, key = { it.id }) { agricultor -> // Adiciona key para melhor performance
                         Card(elevation = CardDefaults.cardElevation(2.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                             Row(
                                 modifier = Modifier
@@ -172,7 +235,7 @@ fun CadastroAgricultoresScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text("ID: ${agricultor.id}", fontWeight = FontWeight.Bold)
-                                    Text("Nome: ${agricultor.nome}")
+                                    Text(agricultor.nome) // Mostra o nome diretamente
                                 }
                                 Row {
                                     IconButton(onClick = {
@@ -180,15 +243,15 @@ fun CadastroAgricultoresScreen(
                                         idInput = agricultor.id
                                         nomeInput = agricultor.nome
                                     }) {
-                                        Icon(Icons.Default.Edit, contentDescription = "Editar")
+                                        Icon(Icons.Default.Edit, contentDescription = "Editar Agricultor ${agricultor.nome}")
                                     }
+                                    // <<< ALTERAÇÃO: Botão de excluir agora mostra o diálogo >>>
                                     IconButton(onClick = {
-                                        coroutineScope.launch {
-                                            agricultorViewModel.delete(agricultor)
-                                            Toast.makeText(context, "Agricultor ${agricultor.nome} deletado!", Toast.LENGTH_SHORT).show()
-                                        }
+                                        agricultorParaDeletar = agricultor
+                                        showConfirmDeleteDialog = true
                                     }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Deletar")
+                                        // <<< ALTERAÇÃO: Cor do ícone de lixeira >>>
+                                        Icon(Icons.Default.Delete, contentDescription = "Deletar Agricultor ${agricultor.nome}", tint = MaterialTheme.colorScheme.error)
                                     }
                                 }
                             }

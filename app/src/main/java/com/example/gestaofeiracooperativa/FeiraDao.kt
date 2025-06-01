@@ -19,7 +19,7 @@ interface FeiraDao {
     @Query("SELECT * FROM feiras WHERE feiraId = :id")
     suspend fun getFeiraById(id: String): FeiraEntity?
 
-    @Query("SELECT * FROM feiras ORDER BY startDate DESC")
+    @Query("SELECT * FROM feiras ORDER BY CAST(feiraId AS INTEGER) ASC")
     fun getAllFeiras(): Flow<List<FeiraEntity>> // Observável, para listas que atualizam automaticamente
 
     @Query("DELETE FROM feiras WHERE feiraId = :id")

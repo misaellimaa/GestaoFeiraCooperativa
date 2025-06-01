@@ -309,12 +309,15 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
             val currentFeira = feiraEmProcessamento
             if (currentFeira != null && currentFeira.fairDetails.feiraId == feiraIdArg) {
                 // <<< ALTERAÇÃO: Verifica todosOsProdutosState em vez de catalogoProdutos.isEmpty() >>>
+                val agricultorSelecionado = todosOsAgricultoresState.find { it.id == agricultorIdArg }
+                val nomeAgricultorParaDisplay = agricultorSelecionado?.nome ?: "Agricultor $agricultorIdArg"
                 if (todosOsProdutosState.isEmpty()) {
                     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text("Carregando produtos ou nenhum produto cadastrado...") }
                 } else {
                     LancamentoScreen(
                         feiraId = currentFeira.fairDetails.feiraId,
                         agricultorId = agricultorIdArg,
+                        nomeAgricultor = nomeAgricultorParaDisplay,
                         catalogoProdutos = todosOsProdutosState, // <<< ALTERAÇÃO: Passa a lista do banco
                         entradasIniciais = currentFeira.entradasTodosAgricultores[agricultorIdArg] ?: emptyList(),
                         onFinalizar = { novasEntradasDoAgricultor ->
@@ -409,6 +412,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                 currentFeira?.resultadoGeralCalculado?.let { resultado ->
                     ResultadosFeiraScreen(
                         resultadoGeralFeira = resultado,
+                        listaDeAgricultores = todosOsAgricultoresState,
                         onVoltar = { navController.popBackStack() },
                         onSalvarFeira = {
                             currentFeira?.let { feiraParaSalvar ->
