@@ -11,29 +11,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-// Importe a função loadProductsFromAssets, se ela estiver em CsvUtils.kt e no mesmo pacote
-import com.example.gestaofeiracooperativa.loadProductsFromAssets
-
-// Importe suas entidades existentes
-// (Se não estiverem no mesmo package, ajuste o import)
-import com.example.gestaofeiracooperativa.Produto
-import com.example.gestaofeiracooperativa.Agricultor
-
-// Importe suas NOVAS entidades da Feira
-import com.example.gestaofeiracooperativa.FeiraEntity
-import com.example.gestaofeiracooperativa.EntradaEntity
-import com.example.gestaofeiracooperativa.PerdaEntity
-
-// Importe seu TypeConverter
-import com.example.gestaofeiracooperativa.MapStringDoubleConverter
-
-// Importe seus DAOs (os existentes e os que você vai criar)
-import com.example.gestaofeiracooperativa.ProdutoDao
-import com.example.gestaofeiracooperativa.AgricultorDao
-// import com.example.gestaofeiracooperativa.FeiraDao
-// import com.example.gestaofeiracooperativa.EntradaDao
-// import com.example.gestaofeiracooperativa.PerdaDao
-
 
 @Database(
     entities = [
@@ -41,9 +18,11 @@ import com.example.gestaofeiracooperativa.AgricultorDao
         Agricultor::class,      // Entidade existente
         FeiraEntity::class,     // <<< NOVA ENTIDADE ADICIONADA
         EntradaEntity::class,   // <<< NOVA ENTIDADE ADICIONADA
-        PerdaEntity::class      // <<< NOVA ENTIDADE ADICIONADA
+        PerdaEntity::class,      // <<< NOVA ENTIDADE ADICIONA
+        ItemDespesaEntity::class,     // <<< NOVA ENTIDADE ADICIONADA
+        LancamentoMensalDespesaEntity::class // <<< NOVA ENTIDADE ADICIONADA
     ],
-    version = 2, // <<< VERSÃO INCREMENTADA (era 1)
+    version = 3, // <<< VERSÃO INCREMENTADA (era 1)
     exportSchema = false
 )
 @TypeConverters(
@@ -59,6 +38,11 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun feiraDao(): FeiraDao           // <<< NOVO DAO
     abstract fun entradaDao(): EntradaDao         // <<< NOVO DAO
     abstract fun perdaDao(): PerdaDao             // <<< NOVO DAO
+
+    // Declarações para os NOVOS DAOs de Despesa
+    abstract fun itemDespesaDao(): ItemDespesaDao                 // <<< NOVO DAO
+    abstract fun lancamentoMensalDespesaDao(): LancamentoMensalDespesaDao // <<< NOVO DAO
+
 
     companion object {
         @Volatile

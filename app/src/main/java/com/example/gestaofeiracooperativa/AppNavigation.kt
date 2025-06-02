@@ -63,6 +63,7 @@ object AppRoutes {
     const val RESULTADOS_FEIRA_PATTERN = "resultadosFeira/{feiraId}"
     const val CADASTRO_PRODUTOS = "cadastroProdutos"
     const val CADASTRO_AGRICULTORES = "cadastroAgricultores"
+    const val CADASTRO_ITENS_DESPESA = "cadastroItensDespesa"
 
     fun gerenciarFeiraRoute(feiraId: String) = "gerenciarFeira/$feiraId"
     fun lancamentoProdutosRoute(feiraId: String, agricultorId: String) = "lancamentoProdutos/$feiraId/$agricultorId"
@@ -83,6 +84,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
     val feiraDao = remember { database.feiraDao() }
     val entradaDao = remember { database.entradaDao() }
     val perdaDao = remember { database.perdaDao() }
+
 
     // Repositórios
     val feiraRepository = remember {
@@ -177,7 +179,8 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                 onNavigateToNovaFeira = { navController.navigate(AppRoutes.CRIAR_NOVA_FEIRA) },
                 onNavigateToFeirasSalvas = { navController.navigate(AppRoutes.LISTA_FEIRAS_SALVAS) },
                 onNavigateToCadastroProdutos = { navController.navigate(AppRoutes.CADASTRO_PRODUTOS) },
-                onNavigateToCadastroAgricultores = { navController.navigate(AppRoutes.CADASTRO_AGRICULTORES) }
+                onNavigateToCadastroAgricultores = { navController.navigate(AppRoutes.CADASTRO_AGRICULTORES) },
+                onNavigateToCadastroItensDespesa = { navController.navigate(AppRoutes.CADASTRO_ITENS_DESPESA) }
             )
         }
 
@@ -383,6 +386,9 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
 
         composable(AppRoutes.CADASTRO_AGRICULTORES) { /* ... (sem alterações aqui) ... */
             CadastroAgricultoresScreen(navController = navController)
+        }
+        composable(AppRoutes.CADASTRO_ITENS_DESPESA) { /* ... (sem alterações aqui) ... */
+            CadastroItensDespesaScreen(navController = navController)
         }
 
         composable(

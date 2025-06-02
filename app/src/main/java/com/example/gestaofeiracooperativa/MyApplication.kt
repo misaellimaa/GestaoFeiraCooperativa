@@ -18,4 +18,5 @@ class MyApplication : Application() {
     // Instâncias dos repositórios (inicializadas lazy)
     val produtoRepository by lazy { ProdutoRepository(database.produtoDao()) }
     val agricultorRepository by lazy { AgricultorRepository(database.agricultorDao()) }
+    val itemDespesaRepository by lazy { ItemDespesaRepository(database.itemDespesaDao()) }
 }

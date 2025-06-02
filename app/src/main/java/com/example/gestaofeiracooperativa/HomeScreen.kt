@@ -20,7 +20,9 @@ fun HomeScreen(
     onNavigateToNovaFeira: () -> Unit,
     onNavigateToFeirasSalvas: () -> Unit,
     onNavigateToCadastroProdutos: () -> Unit,
-    onNavigateToCadastroAgricultores: () -> Unit
+    onNavigateToCadastroAgricultores: () -> Unit,
+    onNavigateToCadastroItensDespesa: () -> Unit
+
 ) {
     Scaffold(
         topBar = {
@@ -71,6 +73,15 @@ fun HomeScreen(
                 icon = Icons.Filled.People,
                 contentDescription = "Cadastrar e gerenciar agricultores",
                 onClick = onNavigateToCadastroAgricultores
+            )
+
+            Divider(modifier = Modifier.padding(vertical = 8.dp)) // Divisor opcional
+
+            NavigationCard(
+                text = "Gerenciar Itens de Despesa",
+                icon = Icons.Filled.People,
+                contentDescription = "Cadastrar e gerenciar itens de despesa",
+                onClick = onNavigateToCadastroItensDespesa
             )
         }
     }
