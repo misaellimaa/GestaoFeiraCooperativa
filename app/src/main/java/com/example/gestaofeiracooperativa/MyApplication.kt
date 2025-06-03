@@ -19,4 +19,6 @@ class MyApplication : Application() {
     val produtoRepository by lazy { ProdutoRepository(database.produtoDao()) }
     val agricultorRepository by lazy { AgricultorRepository(database.agricultorDao()) }
     val itemDespesaRepository by lazy { ItemDespesaRepository(database.itemDespesaDao()) }
+    val lancamentoDespesaRepository by lazy { LancamentoDespesaRepository(database.lancamentoMensalDespesaDao()) }
+    val despesaFeiraRepository by lazy { DespesaFeiraRepository(database.despesaFeiraDao()) }
 }

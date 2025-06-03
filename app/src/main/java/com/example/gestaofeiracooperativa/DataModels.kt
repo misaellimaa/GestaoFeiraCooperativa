@@ -159,5 +159,6 @@ data class DadosCompletosFeira(
     val fairDetails: FairDetails,
     val entradasTodosAgricultores: Map<String, List<EntradaItemAgricultor>>,
     val perdasTotaisDaFeira: List<PerdaItemFeira>,
+    val despesasDaFeira: List<DespesaFeiraUiItem>,
     val resultadoGeralCalculado: ResultadoGeralFeira?
 )

@@ -1,6 +1,6 @@
 package com.example.gestaofeiracooperativa
 
-import android.widget.Toast // Não esqueça de importar Toast
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -9,32 +9,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.PostAdd
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.Payment // Mantido para despesas
 import androidx.compose.runtime.remember
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 
-// Importe Agricultor e FairDetails
-import com.example.gestaofeiracooperativa.Agricultor
-import com.example.gestaofeiracooperativa.FairDetails
-// Importe StandardTopAppBar e NavigationCard
-// import com.example.gestaofeiracooperativa.StandardTopAppBar
-// import com.example.gestaofeiracooperativa.NavigationCard
-
-
-// Se o NavigationCard não estiver em um arquivo comum, mantenha-o aqui ou mova-o.
-// Vou assumir que ele pode ser movido para AppUiComponents.kt e importado.
-// Se não, descomente esta seção:
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NavigationCard(
+private fun NavigationCard( // Mantendo private se estiver definida apenas aqui
     text: String,
     icon: ImageVector,
     contentDescription: String,
@@ -76,17 +64,20 @@ private fun NavigationCard(
 }
 
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GerenciarFeiraScreen(
     navController: NavHostController,
     feiraDetails: FairDetails,
     listaDeAgricultores: List<Agricultor>,
+    isFeiraPersistida: Boolean,
     onNavigateToLancamentos: (agricultorId: String) -> Unit,
+    onNavigateToDespesasFeira: (feiraId: String) -> Unit,
     onNavigateToPerdasTotais: () -> Unit,
     onNavigateToResultados: () -> Unit,
     onSalvarFeira: () -> Unit
+    // Adicionar callback para navegar para despesas da feira, se AppNavigation não o fizer diretamente
+    // onNavigateToDespesasFeira: (feiraId: String) -> Unit // Opcional, se preferir desacoplar
 ) {
     var agricultorIdSelecionado by remember { mutableStateOf("") }
     var expandedAgricultorDropdown by remember { mutableStateOf(false) }
@@ -96,11 +87,7 @@ fun GerenciarFeiraScreen(
             "Selecione o Agricultor"
         } else {
             val agricultorEncontrado = listaDeAgricultores.find { it.id == agricultorIdSelecionado }
-            if (agricultorEncontrado != null) {
-                "ID: ${agricultorEncontrado.id} - ${agricultorEncontrado.nome}"
-            } else {
-                "Agricultor ID: $agricultorIdSelecionado (Nome não encontrado)"
-            }
+            agricultorEncontrado?.let { "ID: ${it.id} - ${it.nome}" } ?: "ID: $agricultorIdSelecionado (não encontrado)"
         }
     }
 
@@ -109,7 +96,7 @@ fun GerenciarFeiraScreen(
     Scaffold(
         topBar = {
             StandardTopAppBar(
-                title = "Gerenciar Feira", // Título simplificado
+                title = "Gerenciar Feira",
                 canNavigateBack = true,
                 onNavigateBack = { navController.navigateUp() },
                 actions = {
@@ -126,34 +113,30 @@ fun GerenciarFeiraScreen(
                 .fillMaxSize()
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp) // Espaçamento entre os cards/seções principais
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Título da tela e detalhes da feira no topo
             Text(
                 "Feira Nº ${feiraDetails.feiraId}",
-                style = MaterialTheme.typography.headlineSmall, // Destaque maior
+                style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
             Text(
                 "Período: ${feiraDetails.startDate} a ${feiraDetails.endDate}",
-                style = MaterialTheme.typography.titleSmall, // Um pouco menor que o ID
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Normal,
-                modifier = Modifier.padding(bottom = 16.dp) // Espaço antes do primeiro card
+                modifier = Modifier.padding(bottom = 16.dp)
             )
 
-            // <<< INÍCIO DA ALTERAÇÃO: Card Agrupado para Lançamento de Entradas >>>
             Card(elevation = CardDefaults.cardElevation(4.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp) // Espaçamento interno do card
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        "Entradas de Produtos por Agricultor", // Título da Seção dentro do Card
+                        "Entradas de Produtos por Agricultor",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
-
-                    // Dropdown para selecionar agricultor
                     ExposedDropdownMenuBox(
                         expanded = expandedAgricultorDropdown,
                         onExpandedChange = { expandedAgricultorDropdown = !expandedAgricultorDropdown },
@@ -164,7 +147,7 @@ fun GerenciarFeiraScreen(
                             readOnly = true,
                             value = nomeDisplayAgricultorSelecionado,
                             onValueChange = {},
-                            label = { Text("Selecionar Agricultor") }, // Label simplificado
+                            label = { Text("Selecionar Agricultor") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedAgricultorDropdown) }
                         )
                         ExposedDropdownMenu(
@@ -190,8 +173,6 @@ fun GerenciarFeiraScreen(
                             }
                         }
                     }
-
-                    // Botão para Lançar/Editar Entradas (agora um Button normal dentro do Card)
                     Button(
                         onClick = {
                             if (agricultorIdSelecionado.isNotBlank()) {
@@ -204,33 +185,39 @@ fun GerenciarFeiraScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(Icons.Filled.PostAdd, contentDescription = null) // Ícone no botão
+                            Icon(Icons.Filled.PostAdd, contentDescription = null)
                             Text("Lançar/Editar Entradas")
                         }
                     }
                 }
             }
-            // <<< FIM DA ALTERAÇÃO: Card Agrupado para Lançamento de Entradas >>>
-
-
-            // Os outros NavigationCards para Perdas e Resultados permanecem como estavam,
-            // pois são ações gerais da feira e não dependem da seleção de agricultor nesta tela.
-            // Podemos adicionar um título de seção para eles também, se desejar.
 
             Text(
-                "Outras Ações da Feira:",
+                "Ações e Registros Gerais da Feira:",
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.align(Alignment.Start).padding(top = 8.dp) // Espaço acima do título da seção
+                modifier = Modifier.align(Alignment.Start).padding(top = 8.dp)
             )
 
-            NavigationCard( // Certifique-se que NavigationCard está acessível (ex: importado de AppUiComponents.kt)
+            // <<< ALTERAÇÃO PRINCIPAL AQUI no onClick do NavigationCard de Despesas >>>
+            NavigationCard(
+                text = "Lançar/Ver Despesas da Feira", // Texto ajustado
+                icon = Icons.Filled.Payment,
+                contentDescription = "Lançar ou visualizar despesas para esta feira",
+                enabled = isFeiraPersistida,
+                onClick = {
+                    // Navega para a rota que espera o feiraId
+                    navController.navigate(AppRoutes.lancamentoDespesasFeiraRoute(feiraDetails.feiraId))
+                }
+            )
+
+            NavigationCard(
                 text = "Lançar/Editar Perdas Totais",
                 icon = Icons.Filled.Inventory,
                 contentDescription = "Lançar ou editar as perdas totais de produtos da feira",
                 onClick = onNavigateToPerdasTotais
             )
 
-            NavigationCard( // Certifique-se que NavigationCard está acessível
+            NavigationCard(
                 text = "Processar e Ver Resultados",
                 icon = Icons.Filled.Assessment,
                 contentDescription = "Processar os dados e visualizar os resultados da feira",

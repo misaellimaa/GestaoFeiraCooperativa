@@ -20,9 +20,10 @@ import kotlinx.coroutines.launch
         EntradaEntity::class,   // <<< NOVA ENTIDADE ADICIONADA
         PerdaEntity::class,      // <<< NOVA ENTIDADE ADICIONA
         ItemDespesaEntity::class,     // <<< NOVA ENTIDADE ADICIONADA
-        LancamentoMensalDespesaEntity::class // <<< NOVA ENTIDADE ADICIONADA
+        LancamentoMensalDespesaEntity::class, // <<< NOVA ENTIDADE ADICIONADA
+        DespesaFeiraEntity::class
     ],
-    version = 3, // <<< VERSÃO INCREMENTADA (era 1)
+    version = 4, // <<< VERSÃO INCREMENTADA (era 1)
     exportSchema = false
 )
 @TypeConverters(
@@ -38,6 +39,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun feiraDao(): FeiraDao           // <<< NOVO DAO
     abstract fun entradaDao(): EntradaDao         // <<< NOVO DAO
     abstract fun perdaDao(): PerdaDao             // <<< NOVO DAO
+    abstract fun despesaFeiraDao(): DespesaFeiraDao // <<< NOVO DAO
 
     // Declarações para os NOVOS DAOs de Despesa
     abstract fun itemDespesaDao(): ItemDespesaDao                 // <<< NOVO DAO
