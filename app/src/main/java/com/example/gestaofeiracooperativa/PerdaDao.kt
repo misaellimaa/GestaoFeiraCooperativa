@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -24,4 +25,7 @@ interface PerdaDao {
     // Útil para quando você quiser substituir todas as perdas de uma feira
     @Query("DELETE FROM perdas_feira WHERE feiraId = :feiraId")
     suspend fun deleteAllPerdasForFeira(feiraId: String)
+
+    @Update
+    suspend fun update(perda: PerdaEntity)
 }

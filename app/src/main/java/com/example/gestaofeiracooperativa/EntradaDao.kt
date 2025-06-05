@@ -4,12 +4,14 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
+
 
 @Dao
 interface EntradaDao {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertEntrada(entrada: EntradaEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -31,4 +33,11 @@ interface EntradaDao {
 
     @Query("DELETE FROM entradas_feira WHERE feiraId = :feiraId")
     suspend fun deleteAllEntradasForFeira(feiraId: String)
+
+    // 2. Um método para atualizar uma entrada existente (o Room usará a chave primária para encontrar)
+    @Update
+    suspend fun update(entrada: EntradaEntity)
+
+    @Query("UPDATE entradas_feira SET quantidade_sobra = 0 WHERE feiraId = :feiraId")
+    suspend fun resetarSobrasParaFeira(feiraId: String)
 }

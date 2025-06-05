@@ -5,7 +5,7 @@ import androidx.room.Entity // ADICIONAR IMPORT
 import androidx.room.PrimaryKey // ADICIONAR IMPORT
 import androidx.room.ForeignKey // ADICIONAR IMPORT
 import androidx.room.Index
-
+import androidx.room.ColumnInfo
 val diasDaSemanaFeira = listOf("TER", "QUA", "QUI", "SEX", "SAB", "DOM")
 
 @Serializable
@@ -16,9 +16,9 @@ data class FairDetails(
 )
 
 @Serializable
-@Entity(tableName = "produtos") // Anotação para indicar que é uma tabela do Room
+@Entity(tableName = "produtos")
 data class Produto(
-    @PrimaryKey // Anotação para chave primária
+    @PrimaryKey
     val numero: String,
     val item: String,
     val unidade: String,
@@ -26,94 +26,83 @@ data class Produto(
 )
 
 @Serializable
-@Entity(tableName = "agricultores") // <<--- ADICIONE ESTAS ANOTAÇÕES PARA AGRICULTOR
+@Entity(tableName = "agricultores")
 data class Agricultor(
-    @PrimaryKey // Define 'id' como a chave primária
-    val id: String, // ID do agricultor (ex: "1", "25")
-    val nome: String // Nome do agricultor (ex: "José Silva")
+    @PrimaryKey
+    val id: String,
+    val nome: String
 )
 
-// Nova Entidade Principal da Feira
 @Entity(tableName = "feiras")
 data class FeiraEntity(
     @PrimaryKey
     val feiraId: String,
     val startDate: String,
     val endDate: String,
-    // Se decidir armazenar o resultado geral como JSON:
     val resultadoGeralJson: String? = null
 )
 
-// Nova Entidade para Entradas de Produtos por Agricultor
+// <<< ALTERAÇÃO 1: Adicionado novo campo 'quantidadeSobra' >>>
 @Entity(
     tableName = "entradas_feira",
-    primaryKeys = ["feiraId", "agricultorId", "produtoNumero"], // Chave primária composta
+    primaryKeys = ["feiraId", "agricultorId", "produtoNumero"],
     foreignKeys = [
-        ForeignKey(
-            entity = FeiraEntity::class,
-            parentColumns = ["feiraId"],
-            childColumns = ["feiraId"],
-            onDelete = ForeignKey.CASCADE // Se uma feira for deletada, suas entradas são deletadas
-        ),
-        ForeignKey(
-            entity = Agricultor::class,
-            parentColumns = ["id"],
-            childColumns = ["agricultorId"],
-            onDelete = ForeignKey.CASCADE // Se um agricultor for deletado, suas entradas são deletadas
-        ),
-        ForeignKey(
-            entity = Produto::class,
-            parentColumns = ["numero"],
-            childColumns = ["produtoNumero"],
-            onDelete = ForeignKey.CASCADE // Se um produto for deletado, suas entradas são deletadas
-        )
+        ForeignKey(entity = FeiraEntity::class, parentColumns = ["feiraId"], childColumns = ["feiraId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = Agricultor::class, parentColumns = ["id"], childColumns = ["agricultorId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = Produto::class, parentColumns = ["numero"], childColumns = ["produtoNumero"], onDelete = ForeignKey.CASCADE)
     ],
-    indices = [ // <<< ADICIONE ESTE BLOCO DE ÍNDICES
-        Index(value = ["agricultorId"]),
-        Index(value = ["produtoNumero"])
-    ]
+    indices = [Index(value = ["agricultorId"]), Index(value = ["produtoNumero"])]
 )
 data class EntradaEntity(
     val feiraId: String,
     val agricultorId: String,
     val produtoNumero: String,
-    val quantidadesPorDiaJson: String // Armazenará o Map<String, Double> como JSON
+    // Este é o "crédito" de sobras da feira anterior que é distribuído
+    @ColumnInfo(name = "quantidade_sobra", defaultValue = "0.0") // defaultValue para migrações mais fáceis
+    val quantidadeSobra: Double = 0.0,
+    // Este armazena as novas entradas da semana atual
+    val quantidadesPorDiaJson: String
 )
 
-// Nova Entidade para Perdas de Produtos da Feira
+// <<< ALTERAÇÃO 2: Adicionado novo campo 'quantidadeSobra' >>>
 @Entity(
     tableName = "perdas_feira",
-    primaryKeys = ["feiraId", "produtoNumero"], // Chave primária composta
+    primaryKeys = ["feiraId", "produtoNumero"],
     foreignKeys = [
-        ForeignKey(
-            entity = FeiraEntity::class,
-            parentColumns = ["feiraId"],
-            childColumns = ["feiraId"],
-            onDelete = ForeignKey.CASCADE // Se uma feira for deletada, suas perdas são deletadas
-        ),
-        ForeignKey(
-            entity = Produto::class,
-            parentColumns = ["numero"],
-            childColumns = ["produtoNumero"],
-            onDelete = ForeignKey.CASCADE // Se um produto for deletado, suas perdas são deletadas
-        )
+        ForeignKey(entity = FeiraEntity::class, parentColumns = ["feiraId"], childColumns = ["feiraId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = Produto::class, parentColumns = ["numero"], childColumns = ["produtoNumero"], onDelete = ForeignKey.CASCADE)
     ],
-    indices = [ // <<< ADICIONE ESTE BLOCO DE ÍNDICES
-        Index(value = ["produtoNumero"])
-    ]
+    indices = [Index(value = ["produtoNumero"])]
 )
 data class PerdaEntity(
     val feiraId: String,
     val produtoNumero: String,
-    val perdasPorDiaJson: String // Armazenará o Map<String, Double> como JSON
+    val perdasPorDiaJson: String, // Representa o "S PLAN" (perda total)
+    // Este é o valor que o usuário digita como a "SOBRA REAL"
+    @ColumnInfo(name = "quantidade_sobra", defaultValue = "0.0") // defaultValue para migrações mais fáceis
+    val quantidadeSobra: Double = 0.0
 )
+data class SobraUiItem(
+    val produto: Produto,
+    val perdaTotalCalculada: Double,
+    var sobraRealInput: String, // O valor que o usuário digita
+    val perdaEntityOriginal: PerdaEntity
+)
+
+
+// --- As data classes abaixo não são entidades de banco, mas modelos para UI/Lógica ---
+
 @Serializable
 data class EntradaItemAgricultor(
     val produto: Produto,
+    val quantidadeSobraDaSemanaAnterior: Double = 0.0,
     val quantidadesPorDia: Map<String, Double>
 ) {
-    fun getTotalEntregueNaSemana(): Double {
+    fun getTotalEntradasDaSemana(): Double {
         return quantidadesPorDia.values.sum()
+    }
+    fun getContribuicaoTotalParaFeira(): Double {
+        return quantidadeSobraDaSemanaAnterior + getTotalEntradasDaSemana()
     }
 }
 
@@ -130,7 +119,9 @@ data class PerdaItemFeira(
 @Serializable
 data class ItemProcessadoAgricultor(
     val produto: Produto,
-    val quantidadeEntregueTotalSemana: Double,
+    val quantidadeSobraAnterior: Double, // <<< NOVO: Guarda apenas a sobra da feira anterior
+    val quantidadeEntradaSemana: Double, // <<< NOVO: Guarda apenas as entradas da semana atual
+    val contribuicaoTotal: Double,       // <<< NOVO: Soma dos dois acima (substitui o antigo 'quantidadeEntregueTotalSemana')
     val quantidadePerdaAlocada: Double,
     val quantidadeVendida: Double,
     val valorTotalVendido: Double

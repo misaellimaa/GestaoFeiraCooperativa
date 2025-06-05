@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.PostAdd
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Payment // Mantido para despesas
+import androidx.compose.material.icons.filled.Recycling
 import androidx.compose.runtime.remember
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.*
@@ -75,9 +76,8 @@ fun GerenciarFeiraScreen(
     onNavigateToDespesasFeira: (feiraId: String) -> Unit,
     onNavigateToPerdasTotais: () -> Unit,
     onNavigateToResultados: () -> Unit,
+    onNavigateToDistribuirSobras: (feiraId: String) -> Unit,
     onSalvarFeira: () -> Unit
-    // Adicionar callback para navegar para despesas da feira, se AppNavigation não o fizer diretamente
-    // onNavigateToDespesasFeira: (feiraId: String) -> Unit // Opcional, se preferir desacoplar
 ) {
     var agricultorIdSelecionado by remember { mutableStateOf("") }
     var expandedAgricultorDropdown by remember { mutableStateOf(false) }
@@ -198,6 +198,26 @@ fun GerenciarFeiraScreen(
                 modifier = Modifier.align(Alignment.Start).padding(top = 8.dp)
             )
 
+            NavigationCard(
+                text = "Registrar e Distribuir Sobras",
+                icon = Icons.Filled.Recycling, // Ícone sugestivo para reaproveitamento
+                contentDescription = "Registrar sobras da feira atual e distribuir para a próxima",
+                enabled = isFeiraPersistida, // Só pode distribuir sobras de uma feira que já foi salva
+                onClick = {
+                    if (isFeiraPersistida) {
+                        // O parâmetro 'feiraId' aqui é o da feira de DESTINO, como planejamos
+                        // A tela DistribuirSobrasScreen irá então encontrar a feira ANTERIOR a esta.
+                        // CORREÇÃO DE LÓGICA: Deve ser chamado para a feira que TERMINOU (origem), não a feira nova (destino).
+                        // Vamos ajustar a lógica para que o botão apareça na feira certa.
+                        // Por agora, o botão navegará para a nova tela, passando o ID da feira atual.
+                        // A nova tela 'DistribuirSobrasScreen' receberá o ID da feira ATUAL como sendo a de DESTINO
+                        // e encontrará a feira ANTERIOR automaticamente.
+                        onNavigateToDistribuirSobras(feiraDetails.feiraId)
+                    } else {
+                        Toast.makeText(context, "Salve a feira antes de distribuir sobras.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
             // <<< ALTERAÇÃO PRINCIPAL AQUI no onClick do NavigationCard de Despesas >>>
             NavigationCard(
                 text = "Lançar/Ver Despesas da Feira", // Texto ajustado
@@ -205,8 +225,12 @@ fun GerenciarFeiraScreen(
                 contentDescription = "Lançar ou visualizar despesas para esta feira",
                 enabled = isFeiraPersistida,
                 onClick = {
-                    // Navega para a rota que espera o feiraId
-                    navController.navigate(AppRoutes.lancamentoDespesasFeiraRoute(feiraDetails.feiraId))
+                    if (isFeiraPersistida) {
+                        // <<< ALTERAÇÃO AQUI: Usa o callback passado como parâmetro >>>
+                        onNavigateToDespesasFeira(feiraDetails.feiraId)
+                    } else {
+                        Toast.makeText(context, "Salve a feira antes de lançar despesas.", Toast.LENGTH_SHORT).show()
+                    }
                 }
             )
 

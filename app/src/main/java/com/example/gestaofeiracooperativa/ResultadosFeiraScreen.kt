@@ -238,24 +238,36 @@ fun ResultadosFeiraScreen(
                             Text("Nenhum item processado para este agricultor.", style = MaterialTheme.typography.bodyMedium)
                         } else {
                             resultadoAgricultor.itensProcessados.forEach { item ->
-                                Column(modifier = Modifier.padding(bottom = 8.dp)) { // Espaço entre produtos
-                                    Text(
-                                        "${item.produto.item} (#${item.produto.numero})",
-                                        style = MaterialTheme.typography.titleSmall, // Destaque para o nome do produto
-                                        fontWeight = FontWeight.SemiBold
+                                // <<< INÍCIO DA ALTERAÇÃO NA EXIBIÇÃO DOS ITENS >>>
+                                Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                                    Text("${item.produto.item} (#${item.produto.numero})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    // Mostra o total geral entregue
+                                    InfoLinha(
+                                        label = "Total Entregue:",
+                                        valor = "${formatQuantity(item.contribuicaoTotal)} ${item.produto.unidade}",
+                                        isBold = true // Destaca a linha do total
                                     )
-                                    InfoLinha(label = "  Entregue:", valor = "${item.quantidadeEntregueTotalSemana.let { if (it % 1.0 == 0.0) it.toInt().toString() else String.format(Locale.getDefault(), "%.2f", it).replace('.',',') }} ${item.produto.unidade}")
-                                    InfoLinha(label = "  Perda Alocada:", valor = "${String.format(Locale.getDefault(), "%.2f", item.quantidadePerdaAlocada).replace('.',',')} ${item.produto.unidade}")
-                                    InfoLinha(label = "  Vendido:", valor = "${String.format(Locale.getDefault(), "%.2f", item.quantidadeVendida).replace('.',',')} ${item.produto.unidade}")
-                                    InfoLinha(label = "  Valor Vendido:", valor = "R$ ${String.format(Locale.getDefault(), "%.2f", item.valorTotalVendido).replace('.',',')}")
+
+                                    // Mostra o detalhe da composição, se houver sobra
+                                    if (item.quantidadeSobraAnterior > 0) {
+                                        Text(
+                                            text = " (Sobra: ${formatQuantity(item.quantidadeSobraAnterior)} + Semana: ${formatQuantity(item.quantidadeEntradaSemana)})",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            modifier = Modifier.padding(start = 8.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    InfoLinha(label = "  Perda Alocada:", valor = "${formatQuantity(item.quantidadePerdaAlocada)} ${item.produto.unidade}")
+                                    InfoLinha(label = "  Vendido:", valor = "${formatQuantity(item.quantidadeVendida)} ${item.produto.unidade}")
+                                    InfoLinha(label = "  Valor Vendido:", valor = formatCurrency(item.valorTotalVendido))
                                 }
-                                Divider(modifier = Modifier.padding(vertical = 4.dp)) // Divisor entre produtos
-                            }
-                            // Remove o último divisor se houver itens
-                            if (resultadoAgricultor.itensProcessados.isNotEmpty()) {
-                                // Esta é uma forma de remover o último divisor, mas pode ser mais complexo que o necessário.
-                                // Uma alternativa é não adicionar o Divider no último item do loop.
-                                // Por ora, o Divider após cada item pode ser suficiente.
+                                Divider(modifier = Modifier.padding(vertical = 4.dp))
+                                // <<< FIM DA ALTERAÇÃO NA EXIBIÇÃO DOS ITENS >>>
                             }
                         }
 
@@ -273,7 +285,12 @@ fun ResultadosFeiraScreen(
 }
 
 @Composable
-fun InfoLinha(label: String, valor: String, isTotal: Boolean = false) {
+fun InfoLinha(
+    label: String,
+    valor: String,
+    isTotal: Boolean = false,
+    isBold: Boolean = false
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), // Pequeno padding vertical
         horizontalArrangement = Arrangement.SpaceBetween

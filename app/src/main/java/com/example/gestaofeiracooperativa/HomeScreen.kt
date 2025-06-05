@@ -1,16 +1,14 @@
-package com.example.gestaofeiracooperativa // <<--- ATENÇÃO: MUDE PARA O SEU PACKAGE REAL
+package com.example.gestaofeiracooperativa
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.EditNote // Para Iniciar/Continuar Feira
-import androidx.compose.material.icons.filled.ListAlt // Para Ver Feiras Salvas
-import androidx.compose.material.icons.filled.Inventory2 // Para Gerenciar Produtos
-import androidx.compose.material.icons.filled.People // Para Gerenciar Agricultores
+import androidx.compose.material.icons.filled.* // Importa todos os ícones 'filled'
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector // Necessário para o parâmetro do ícone
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -21,17 +19,14 @@ fun HomeScreen(
     onNavigateToFeirasSalvas: () -> Unit,
     onNavigateToCadastroProdutos: () -> Unit,
     onNavigateToCadastroAgricultores: () -> Unit,
-    onNavigateToCadastroItensDespesa: () -> Unit
-
+    onNavigateToCadastroItensDespesa: () -> Unit,
+    onNavigateToRelatorioDespesas: () -> Unit // <<< NOVO CALLBACK
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Gestão de Feiras da Cooperativa") },
-                colors = TopAppBarDefaults.topAppBarColors( // Opcional: cores customizadas para a TopAppBar
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+            StandardTopAppBar( // Assumindo que você já aplicou a TopAppBar Padrão aqui
+                title = "Gestão de Feiras da Cooperativa",
+                canNavigateBack = false // A tela inicial não tem botão de voltar
             )
         }
     ) { innerPadding ->
@@ -39,88 +34,101 @@ fun HomeScreen(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .padding(16.dp), // Padding geral da tela
+                .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            // <<< ALTERAÇÃO: Arrangement.Top para começar do topo, com espaçamento >>>
             verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.Top)
         ) {
-            // Chamada a um Composable auxiliar para criar os cards
+            // Seção de Feiras
             NavigationCard(
-                text = "Iniciar Feira",
+                text = "Iniciar / Gerenciar Feira",
                 icon = Icons.Filled.EditNote,
-                contentDescription = "Iniciar ou continuar o gerenciamento de uma feira",
+                contentDescription = "Iniciar ou gerenciar uma feira",
                 onClick = onNavigateToNovaFeira
             )
-
             NavigationCard(
                 text = "Ver Feiras Salvas",
                 icon = Icons.Filled.ListAlt,
-                contentDescription = "Visualizar feiras que foram salvas anteriormente",
+                contentDescription = "Visualizar feiras salvas",
                 onClick = onNavigateToFeirasSalvas
             )
 
-            Divider(modifier = Modifier.padding(vertical = 8.dp)) // Divisor opcional
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
 
+            // Seção de Cadastros
             NavigationCard(
                 text = "Gerenciar Produtos",
                 icon = Icons.Filled.Inventory2,
-                contentDescription = "Cadastrar e gerenciar produtos (CAD PROD)",
+                contentDescription = "Cadastrar e gerenciar produtos",
                 onClick = onNavigateToCadastroProdutos
             )
-
             NavigationCard(
                 text = "Gerenciar Agricultores",
                 icon = Icons.Filled.People,
                 contentDescription = "Cadastrar e gerenciar agricultores",
                 onClick = onNavigateToCadastroAgricultores
             )
-
-            Divider(modifier = Modifier.padding(vertical = 8.dp)) // Divisor opcional
-
             NavigationCard(
                 text = "Gerenciar Itens de Despesa",
-                icon = Icons.Filled.People,
+                icon = Icons.Filled.Summarize, // Ícone diferente para despesas
                 contentDescription = "Cadastrar e gerenciar itens de despesa",
                 onClick = onNavigateToCadastroItensDespesa
+            )
+
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // <<< NOVO: Card para Relatório Mensal de Despesas >>>
+            NavigationCard(
+                text = "Relatório Mensal de Despesas",
+                icon = Icons.Filled.RequestQuote, // Ícone para relatórios/resumos
+                contentDescription = "Gerar relatório mensal consolidado de despesas",
+                onClick = onNavigateToRelatorioDespesas
             )
         }
     }
 }
 
-// <<< NOVO: Composable auxiliar para criar os Cards de Navegação >>>
+// <<< ATENÇÃO: NavigationCard Atualizado >>>
+// Este é o NavigationCard que inclui o parâmetro 'enabled'.
+// É uma ótima ideia mover este Composable para um arquivo comum (ex: AppUiComponents.kt),
+// remover o 'private' e importá-lo tanto aqui quanto na GerenciarFeiraScreen para evitar código duplicado.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NavigationCard(
     text: String,
     icon: ImageVector,
     contentDescription: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true // Parâmetro que adicionamos para GerenciarFeiraScreen
 ) {
     Card(
-        onClick = onClick,
+        onClick = { if (enabled) onClick() },
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 72.dp), // Altura mínima para o card
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        shape = MaterialTheme.shapes.medium // Bordas arredondadas
+            .heightIn(min = 72.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (enabled) 4.dp else 1.dp),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = if (enabled) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface.copy(alpha = 0.38f),
+            contentColor = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        )
     ) {
         Row(
             modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 12.dp) // Padding interno do Card
+                .padding(horizontal = 16.dp, vertical = 12.dp)
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp) // Espaço entre o ícone e o texto
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                modifier = Modifier.size(36.dp), // Tamanho do ícone
-                tint = MaterialTheme.colorScheme.primary // Cor do ícone
+                modifier = Modifier.size(36.dp),
+                tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
             )
             Text(
                 text = text,
-                style = MaterialTheme.typography.titleMedium, // Estilo do texto
-                fontWeight = FontWeight.Medium // Peso da fonte
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium
             )
         }
     }

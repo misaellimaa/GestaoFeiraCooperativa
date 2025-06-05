@@ -21,9 +21,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
-import java.util.Calendar // Para Calendar.getInstance()
 
-// IMPORTS DE TELAS (Verifique se todos existem e estão corretos)
+
+// IMPORTS DE TELAS
 import com.example.gestaofeiracooperativa.HomeScreen
 import com.example.gestaofeiracooperativa.ListaFeirasSalvasScreen
 import com.example.gestaofeiracooperativa.CriarNovaFeiraScreen
@@ -36,24 +36,25 @@ import com.example.gestaofeiracooperativa.CadastroAgricultoresScreen
 import com.example.gestaofeiracooperativa.CadastroItensDespesaScreen
 import com.example.gestaofeiracooperativa.LancamentoDespesasFeiraScreen
 
-// IMPORTS PARA ROOM E REPOSITORY (Verifique se todos existem e estão corretos)
+// IMPORTS PARA ROOM E REPOSITORY
 import com.example.gestaofeiracooperativa.AppDatabase
 import com.example.gestaofeiracooperativa.FeiraRepository
 import com.example.gestaofeiracooperativa.AgricultorRepository
 import com.example.gestaofeiracooperativa.ProdutoRepository
-import com.example.gestaofeiracooperativa.ItemDespesaRepository
-import com.example.gestaofeiracooperativa.DespesaFeiraRepository
+// Repositórios de despesa serão acessados via 'application' nas factories
+// import com.example.gestaofeiracooperativa.ItemDespesaRepository
+// import com.example.gestaofeiracooperativa.DespesaFeiraRepository
 
-// Modelos de Dados (Verifique se todos existem e estão corretos)
+// Modelos de Dados
 import com.example.gestaofeiracooperativa.DadosCompletosFeira
 import com.example.gestaofeiracooperativa.FairDetails
 import com.example.gestaofeiracooperativa.Agricultor
 import com.example.gestaofeiracooperativa.Produto
-import com.example.gestaofeiracooperativa.DespesaFeiraUiItem // Para o callback onDespesasSalvas
-import com.example.gestaofeiracooperativa.ItemDespesaEntity // Para ViewModelFactory, se necessário aqui
-import com.example.gestaofeiracooperativa.MyApplication // Para acesso aos repositórios via application context
+import com.example.gestaofeiracooperativa.DespesaFeiraUiItem
+import com.example.gestaofeiracooperativa.MyApplication
 
-// Funções de Utilidade (Verifique se existem e estão corretas)
+
+// Funções de Utilidade
 import com.example.gestaofeiracooperativa.loadProductsFromAssets
 import com.example.gestaofeiracooperativa.calcularResultadosFeira
 
@@ -70,12 +71,15 @@ object AppRoutes {
     const val CADASTRO_AGRICULTORES = "cadastroAgricultores"
     const val CADASTRO_ITENS_DESPESA = "cadastroItensDespesa"
     const val LANCAMENTO_DESPESAS_FEIRA_PATTERN = "lancamentoDespesasFeira/{feiraId}"
+    const val SELECIONAR_MES_ANO_DESPESA = "selecionarMesAnoDespesa"
+    const val DISTRIBUIR_SOBRAS_PATTERN = "distribuirSobras/{feiraIdAtual}"
 
     fun gerenciarFeiraRoute(feiraId: String) = "gerenciarFeira/$feiraId"
     fun lancamentoProdutosRoute(feiraId: String, agricultorId: String) = "lancamentoProdutos/$feiraId/$agricultorId"
     fun lancamentoPerdasTotaisRoute(feiraId: String) = "lancamentoPerdasTotais/$feiraId"
     fun resultadosFeiraRoute(feiraId: String) = "resultadosFeira/$feiraId"
     fun lancamentoDespesasFeiraRoute(feiraId: String) = "lancamentoDespesasFeira/$feiraId"
+    fun distribuirSobrasRoute(feiraIdAtual: String) = "distribuirSobras/$feiraIdAtual"
 }
 
 @Composable
@@ -98,10 +102,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
     // Repositórios
     val produtoRepository = remember { ProdutoRepository(produtoDao) }
     val agricultorRepository = remember { AgricultorRepository(agricultorDao) }
-    val itemDespesaRepository = remember { ItemDespesaRepository(itemDespesaDao) } // Usado por factories
-    val despesaFeiraRepository = remember { DespesaFeiraRepository(despesaFeiraDao) } // Usado por factories
-
-    val feiraRepository = remember {
+    val feiraRepository = remember { // Este é o feiraRepository principal
         FeiraRepository(
             appDatabase = database,
             feiraDao = feiraDao,
@@ -109,20 +110,20 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
             perdaDao = perdaDao,
             produtoDao = produtoDao,
             agricultorDao = agricultorDao,
-            itemDespesaDao = itemDespesaDao,     // Passando o DAO
-            despesaFeiraDao = despesaFeiraDao,   // Passando o DAO
+            itemDespesaDao = itemDespesaDao,
+            despesaFeiraDao = despesaFeiraDao,
             applicationContext = context.applicationContext
         )
     }
+    // Os repositórios ItemDespesaRepository e DespesaFeiraRepository são acessados via 'application'
+    // nas Factories dos ViewModels de despesa. Certifique-se que 'MyApplication.kt' os provê.
 
-    // Estados coletados dos Flows
+    // Estados
     val todosOsAgricultoresState by agricultorRepository.getAllAgricultores().collectAsState(initial = emptyList())
     val todosOsProdutosState by produtoRepository.getAllProducts().collectAsState(initial = emptyList())
     val catalogoProdutosOriginalDoCSV by remember { mutableStateOf(loadProductsFromAssets(context, "CAD PROD.csv")) }
-
     var feiraEmProcessamento by remember { mutableStateOf<DadosCompletosFeira?>(null) }
-    var isCurrentFeiraPersisted by remember { mutableStateOf(false) } // <<< NOVO ESTADO
-
+    var isCurrentFeiraPersisted by remember { mutableStateOf(false) }
     var showDialogFeiraJaExiste by remember { mutableStateOf(false) }
     var novaFeiraIdParaCriar by remember { mutableStateOf("") }
     var novaStartDateParaCriar by remember { mutableStateOf("") }
@@ -134,30 +135,27 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
         endDateForNew: String?
     ) {
         scope.launch {
-            Log.d("AppNavigation", "carregarOuIniciarNovaFeiraState para Feira ID: $feiraId. Buscando no repositório...")
+            Log.d("AppNavigation", "carregarOuIniciarNovaFeiraState para Feira ID: $feiraId.")
             val dadosCarregados = feiraRepository.carregarDadosCompletosFeira(feiraId)
             if (dadosCarregados != null) {
                 feiraEmProcessamento = dadosCarregados
-                isCurrentFeiraPersisted = true // <<< ATUALIZADO
-                Toast.makeText(context, "Feira $feiraId carregada do banco!", Toast.LENGTH_SHORT).show()
-                Log.d("AppNavigation", "Feira $feiraId carregada do banco: $feiraEmProcessamento")
+                isCurrentFeiraPersisted = true
+                Toast.makeText(context, "Feira $feiraId carregada!", Toast.LENGTH_SHORT).show()
             } else {
                 if (startDateForNew != null && endDateForNew != null && startDateForNew.isNotBlank() && endDateForNew.isNotBlank()) {
                     feiraEmProcessamento = DadosCompletosFeira(
                         fairDetails = FairDetails(feiraId, startDateForNew, endDateForNew),
                         entradasTodosAgricultores = mutableStateMapOf(),
                         perdasTotaisDaFeira = mutableStateListOf(),
-                        despesasDaFeira = mutableStateListOf(), // <<< INICIALIZADO
+                        despesasDaFeira = mutableStateListOf(),
                         resultadoGeralCalculado = null
                     )
-                    isCurrentFeiraPersisted = false // <<< ATUALIZADO
-                    Toast.makeText(context, "Iniciando nova Feira $feiraId (ainda não salva).", Toast.LENGTH_SHORT).show()
-                    Log.d("AppNavigation", "Nova Feira $feiraId iniciada em memória: $feiraEmProcessamento")
+                    isCurrentFeiraPersisted = false
+                    Toast.makeText(context, "Iniciando nova Feira $feiraId.", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(context, "Falha ao carregar Feira $feiraId (não encontrada) e detalhes para nova feira ausentes.", Toast.LENGTH_LONG).show()
-                    Log.w("AppNavigation", "Falha ao carregar ou iniciar feira $feiraId. Datas para nova: S:$startDateForNew E:$endDateForNew")
+                    Toast.makeText(context, "Falha ao carregar/iniciar Feira $feiraId.", Toast.LENGTH_LONG).show()
                     feiraEmProcessamento = null
-                    isCurrentFeiraPersisted = false // <<< ATUALIZADO
+                    isCurrentFeiraPersisted = false
                 }
             }
         }
@@ -167,21 +165,20 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
         AlertDialog(
             onDismissRequest = { showDialogFeiraJaExiste = false },
             title = { Text("Feira Já Existe") },
-            text = { Text("A Feira Nº $novaFeiraIdParaCriar (${novaStartDateParaCriar} - ${novaEndDateParaCriar}) já possui dados salvos. Deseja carregar esses dados ou iniciar uma nova feira (os dados atuais em memória para esta ID serão usados e, ao salvar, os anteriores serão sobrescritos)?") },
+            text = { Text("A Feira Nº $novaFeiraIdParaCriar (${novaStartDateParaCriar} - ${novaEndDateParaCriar}) já possui dados. Carregar ou iniciar nova?") },
             confirmButton = {
                 TextButton(onClick = {
-                    carregarOuIniciarNovaFeiraState(novaFeiraIdParaCriar, null, null) // Força carregamento do banco
+                    carregarOuIniciarNovaFeiraState(novaFeiraIdParaCriar, null, null)
                     showDialogFeiraJaExiste = false
                     navController.navigate(AppRoutes.gerenciarFeiraRoute(novaFeiraIdParaCriar))
-                }) { Text("Carregar Dados Salvos") }
+                }) { Text("Carregar Dados") }
             },
             dismissButton = {
                 TextButton(onClick = {
-                    // Inicia com os dados que o usuário acabou de fornecer na tela CriarNovaFeira
                     carregarOuIniciarNovaFeiraState(novaFeiraIdParaCriar, novaStartDateParaCriar, novaEndDateParaCriar)
                     showDialogFeiraJaExiste = false
                     navController.navigate(AppRoutes.gerenciarFeiraRoute(novaFeiraIdParaCriar))
-                }) { Text("Iniciar Nova com Estas Datas") }
+                }) { Text("Iniciar Nova") }
             }
         )
     }
@@ -194,8 +191,61 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                 onNavigateToFeirasSalvas = { navController.navigate(AppRoutes.LISTA_FEIRAS_SALVAS) },
                 onNavigateToCadastroProdutos = { navController.navigate(AppRoutes.CADASTRO_PRODUTOS) },
                 onNavigateToCadastroAgricultores = { navController.navigate(AppRoutes.CADASTRO_AGRICULTORES) },
-                onNavigateToCadastroItensDespesa = { navController.navigate(AppRoutes.CADASTRO_ITENS_DESPESA) } // Navegação adicionada
+                onNavigateToCadastroItensDespesa = { navController.navigate(AppRoutes.CADASTRO_ITENS_DESPESA) },
+                onNavigateToRelatorioDespesas = { navController.navigate(AppRoutes.SELECIONAR_MES_ANO_DESPESA) }
             )
+        }
+
+        composable(AppRoutes.SELECIONAR_MES_ANO_DESPESA) {
+            SelecionarMesAnoDespesaScreen(
+                navController = navController,
+                viewModel = viewModel(
+                    factory = RelatorioDespesaViewModelFactory(
+                        feiraRepository = application.feiraRepository,
+                        despesaFeiraRepository = application.despesaFeiraRepository,
+                        itemDespesaRepository = application.itemDespesaRepository
+                    )
+                )
+            )
+        }
+
+        composable(
+            route = AppRoutes.DISTRIBUIR_SOBRAS_PATTERN, // O padrão da rota que definimos
+            arguments = listOf(navArgument("feiraIdAtual") { type = NavType.StringType })
+        ) { backStackEntry ->
+            // Pega o ID da feira de destino que foi passado na navegação
+            val feiraIdDestino = backStackEntry.arguments?.getString("feiraIdAtual")
+
+            if (feiraIdDestino != null) {
+                // Instancia o ViewModel usando a Factory e os repositórios da sua classe Application
+                val viewModel: RegistrarSobrasViewModel = viewModel(
+                    factory = RegistrarSobrasViewModelFactory(
+                        feiraIdAtual = feiraIdDestino,
+                        feiraRepository = application.feiraRepository,
+                        produtoRepository = application.produtoRepository,
+                        perdaRepository = application.perdaRepository,
+                        entradaRepository = application.entradaRepository
+                    )
+                )
+
+                // Chama a nova tela, passando o navController, o ID e o ViewModel
+                DistribuirSobrasScreen(
+                    navController = navController,
+                    feiraIdAtual = feiraIdDestino,
+                    viewModel = viewModel,
+                    onDistribuicaoConcluida = {
+                        // Força o recarregamento do feiraEmProcessamento com os dados atualizados do banco
+                        carregarOuIniciarNovaFeiraState(feiraIdDestino, null, null)
+                    }
+                )
+            } else {
+                // Caso de erro: o ID não foi passado corretamente na rota
+                Text("Erro: ID da feira de destino não foi fornecido.")
+                LaunchedEffect(Unit) {
+                    Toast.makeText(context, "Erro de navegação: ID da feira ausente.", Toast.LENGTH_LONG).show()
+                    navController.popBackStack()
+                }
+            }
         }
 
         composable(AppRoutes.LISTA_FEIRAS_SALVAS) {
@@ -260,11 +310,11 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     navController = navController,
                     feiraDetails = currentFeira.fairDetails,
                     listaDeAgricultores = todosOsAgricultoresState,
-                    isFeiraPersistida = feiraEstaPersistida, // <<< PASSADO PARA A TELA
+                    isFeiraPersistida = feiraEstaPersistida,
                     onNavigateToLancamentos = { agricultorId ->
                         navController.navigate(AppRoutes.lancamentoProdutosRoute(currentFeira.fairDetails.feiraId, agricultorId))
                     },
-                    onNavigateToDespesasFeira = { idFeira -> // <<< CALLBACK PARA NAVEGAR PARA DESPESAS
+                    onNavigateToDespesasFeira = { idFeira -> // <<< CALLBACK ADICIONADO
                         navController.navigate(AppRoutes.lancamentoDespesasFeiraRoute(idFeira))
                     },
                     onNavigateToPerdasTotais = {
@@ -272,27 +322,25 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     },
                     onNavigateToResultados = {
                         scope.launch {
-                            val feiraParaProcessar = feiraEmProcessamento // Captura o estado atual
+                            val feiraParaProcessar = feiraEmProcessamento
                             if (feiraParaProcessar != null) {
                                 val resultadoCalculado = if (feiraParaProcessar.resultadoGeralCalculado == null) {
-                                    val temEntradas = feiraParaProcessar.entradasTodosAgricultores.values.any { it.isNotEmpty() }
-                                    val temPerdas = feiraParaProcessar.perdasTotaisDaFeira.isNotEmpty()
-                                    // Adicionar verificação de despesas aqui se elas afetarem o resultado visualizado
-                                    if (temEntradas || temPerdas || feiraParaProcessar.despesasDaFeira.isNotEmpty()) {
+                                    val temAlgoParaProcessar = feiraParaProcessar.entradasTodosAgricultores.values.any { it.isNotEmpty() } ||
+                                            feiraParaProcessar.perdasTotaisDaFeira.isNotEmpty() ||
+                                            feiraParaProcessar.despesasDaFeira.isNotEmpty()
+
+                                    if (temAlgoParaProcessar) {
                                         calcularResultadosFeira(
                                             fairDetails = feiraParaProcessar.fairDetails,
                                             entradasTodosAgricultores = feiraParaProcessar.entradasTodosAgricultores,
                                             perdasTotaisDaFeira = feiraParaProcessar.perdasTotaisDaFeira,
-                                            // TODO: Decidir se 'calcularResultadosFeira' deve usar despesas também
                                             catalogoProdutos = catalogoProdutosOriginalDoCSV
                                         )
                                     } else {
-                                        Toast.makeText(context, "Não há dados para processar resultados da Feira ${feiraParaProcessar.fairDetails.feiraId}.", Toast.LENGTH_LONG).show()
+                                        Toast.makeText(context, "Não há dados para processar para Feira ${feiraParaProcessar.fairDetails.feiraId}.", Toast.LENGTH_LONG).show()
                                         null
                                     }
-                                } else {
-                                    feiraParaProcessar.resultadoGeralCalculado
-                                }
+                                } else { feiraParaProcessar.resultadoGeralCalculado }
 
                                 resultadoCalculado?.let { resultadoFinal ->
                                     feiraEmProcessamento = feiraParaProcessar.copy(resultadoGeralCalculado = resultadoFinal)
@@ -301,24 +349,22 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                             }
                         }
                     },
+                    onNavigateToDistribuirSobras = { feiraIdAtual -> // <<< ADICIONE ESTE
+                        navController.navigate(AppRoutes.distribuirSobrasRoute(feiraIdAtual))
+                    },
                     onSalvarFeira = {
                         scope.launch {
-                            if (currentFeira != null) { // Garante que currentFeira não é nulo
-                                if (feiraRepository.salvarDadosCompletosFeira(currentFeira)) {
-                                    Toast.makeText(context, "Feira ${currentFeira.fairDetails.feiraId} salva!", Toast.LENGTH_SHORT).show()
-                                    isCurrentFeiraPersisted = true // <<< ATUALIZADO
-                                } else {
+                            if (feiraRepository.salvarDadosCompletosFeira(currentFeira)) {
+                                Toast.makeText(context, "Feira ${currentFeira.fairDetails.feiraId} salva!", Toast.LENGTH_SHORT).show()
+                                isCurrentFeiraPersisted = true
+                            } else {
                                     Toast.makeText(context, "Erro ao salvar Feira ${currentFeira.fairDetails.feiraId}.", Toast.LENGTH_SHORT).show()
-                                }
                             }
+
                         }
                     }
                 )
-            } else {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            }
+            } else { Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
         }
 
         composable(
@@ -343,8 +389,6 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text("Carregando produtos...") }
                 } else {
                     LancamentoScreen(
-                        feiraId = currentFeira.fairDetails.feiraId,
-                        agricultorId = agricultorIdArg,
                         nomeAgricultor = nomeAgricultorParaDisplay,
                         catalogoProdutos = todosOsProdutosState,
                         entradasIniciais = currentFeira.entradasTodosAgricultores[agricultorIdArg] ?: emptyList(),
@@ -414,32 +458,45 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
             )
         }
 
+        // <<< ROTA ÚNICA E CORRIGIDA PARA LANCAMENTO_DESPESAS_FEIRA_PATTERN >>>
         composable(
             route = AppRoutes.LANCAMENTO_DESPESAS_FEIRA_PATTERN,
             arguments = listOf(navArgument("feiraId") { type = NavType.StringType })
         ) { backStackEntry ->
             val feiraIdArgumento = backStackEntry.arguments?.getString("feiraId")
-            if (feiraIdArgumento != null) {
+            val fairDetailsDaFeiraAtual = feiraEmProcessamento?.fairDetails?.takeIf { it.feiraId == feiraIdArgumento }
+
+            if (feiraIdArgumento != null && fairDetailsDaFeiraAtual != null) {
                 LancamentoDespesasFeiraScreen(
                     navController = navController,
                     feiraId = feiraIdArgumento,
+                    fairDetails = fairDetailsDaFeiraAtual,
                     viewModel = viewModel(
                         factory = LancamentoDespesasFeiraViewModelFactory(
                             itemDespesaRepository = application.itemDespesaRepository,
                             despesaFeiraRepository = application.despesaFeiraRepository,
+                            feiraRepository = application.feiraRepository, // Passando FeiraRepository
                             feiraId = feiraIdArgumento
                         )
                     ),
+                    // <<< IMPLEMENTAÇÃO DO CALLBACK onDespesasSalvas >>>
                     onDespesasSalvas = { despesasAtualizadasDaTela ->
                         feiraEmProcessamento = feiraEmProcessamento?.copy(
                             despesasDaFeira = despesasAtualizadasDaTela
                         )
-                        Log.d("AppNavigation", "Callback onDespesasSalvas: feiraEmProcessamento atualizado com ${despesasAtualizadasDaTela.size} itens de despesa.")
-                        // A LancamentoDespesasFeiraScreen já faz o popBackStack após o save.
+                        Log.d("AppNavigation", "Callback 'onDespesasSalvas' executado. 'feiraEmProcessamento' atualizado com ${despesasAtualizadasDaTela.size} itens de despesa.")
                     }
                 )
             } else {
-                Text("Erro: ID da Feira não fornecido para lançamento de despesas.")
+                // Estado de carregamento ou erro se os detalhes da feira não estiverem prontos
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Carregando detalhes da feira...")
+                    LaunchedEffect(key1 = feiraIdArgumento) {
+                        if (feiraIdArgumento!= null && (feiraEmProcessamento == null || feiraEmProcessamento?.fairDetails?.feiraId != feiraIdArgumento)) {
+                            carregarOuIniciarNovaFeiraState(feiraIdArgumento, null, null)
+                        }
+                    }
+                }
             }
         }
 
@@ -457,14 +514,22 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
             var currentFeiraLocal = feiraEmProcessamento
             if (currentFeiraLocal != null && currentFeiraLocal.fairDetails.feiraId == feiraIdArg) {
                 if (currentFeiraLocal.resultadoGeralCalculado == null) {
-                    val novoResultado = calcularResultadosFeira(
-                        fairDetails = currentFeiraLocal.fairDetails,
-                        entradasTodosAgricultores = currentFeiraLocal.entradasTodosAgricultores,
-                        perdasTotaisDaFeira = currentFeiraLocal.perdasTotaisDaFeira,
-                        catalogoProdutos = catalogoProdutosOriginalDoCSV
-                    )
-                    feiraEmProcessamento = currentFeiraLocal.copy(resultadoGeralCalculado = novoResultado)
-                    currentFeiraLocal = feiraEmProcessamento
+                    val temAlgoParaProcessar = currentFeiraLocal.entradasTodosAgricultores.values.any { it.isNotEmpty() } ||
+                            currentFeiraLocal.perdasTotaisDaFeira.isNotEmpty() ||
+                            currentFeiraLocal.despesasDaFeira.isNotEmpty()
+                    if (temAlgoParaProcessar) {
+                        val novoResultado = calcularResultadosFeira(
+                            fairDetails = currentFeiraLocal.fairDetails,
+                            entradasTodosAgricultores = currentFeiraLocal.entradasTodosAgricultores,
+                            perdasTotaisDaFeira = currentFeiraLocal.perdasTotaisDaFeira,
+                            catalogoProdutos = catalogoProdutosOriginalDoCSV
+                            // TODO: Passar despesas para calcularResultadosFeira se elas afetam o resultado financeiro.
+                        )
+                        feiraEmProcessamento = currentFeiraLocal.copy(resultadoGeralCalculado = novoResultado)
+                        currentFeiraLocal = feiraEmProcessamento
+                    } else {
+                        Toast.makeText(context, "Não há dados lançados para gerar resultados.", Toast.LENGTH_LONG).show()
+                    }
                 }
 
                 currentFeiraLocal?.resultadoGeralCalculado?.let { resultado ->
@@ -473,7 +538,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                         listaDeAgricultores = todosOsAgricultoresState,
                         onVoltar = { navController.popBackStack() },
                         onSalvarFeira = {
-                            currentFeiraLocal?.let { feiraParaSalvar ->
+                            currentFeiraLocal.let { feiraParaSalvar ->
                                 scope.launch {
                                     if (feiraRepository.salvarDadosCompletosFeira(feiraParaSalvar)) {
                                         Toast.makeText(context, "Feira ${feiraParaSalvar.fairDetails.feiraId} salva!", Toast.LENGTH_SHORT).show()
@@ -490,8 +555,8 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     )
                 } ?: run {
                     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Não foi possível obter ou calcular os resultados para a Feira ${currentFeiraLocal?.fairDetails?.feiraId}.")
-                        Text("Verifique se há entradas ou perdas lançadas.")
+                        Text("Não foi possível calcular ou exibir os resultados para a Feira ${currentFeiraLocal?.fairDetails?.feiraId}.")
+                        Text("Verifique se há entradas, perdas ou despesas lançadas.")
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(onClick = { navController.popBackStack() }) { Text("Voltar") }
                     }

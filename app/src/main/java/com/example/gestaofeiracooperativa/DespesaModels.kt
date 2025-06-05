@@ -2,103 +2,43 @@ package com.example.gestaofeiracooperativa
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import androidx.room.ForeignKey
+import java.io.File // Necessário para UiState.Success
 
+// Entidade para os TIPOS de despesa (ex: Gasolina, Alimentação)
 @Entity(
     tableName = "itens_despesa",
     indices = [Index(value = ["nome"], unique = true)] // Garante que o nome do item de despesa seja único
 )
 data class ItemDespesaEntity(
     @PrimaryKey(autoGenerate = true)
-    val id: Long = 0, // Chave primária autogerada
-
-    @ColumnInfo(name = "nome")
-    val nome: String, // Ex: "Gasolina", "Refeição", "Salários", "Sacolas"
-
-    @ColumnInfo(name = "descricao")
-    val descricao: String? = null // Opcional: uma breve descrição do item
-)
-@Entity(
-    tableName = "lancamentos_despesas_mensais",
-    // Garante que só haja um registro de um item de despesa para um determinado mês/ano
-    indices = [Index(value = ["itemDespesaId", "ano", "mes"], unique = true)],
-    foreignKeys = [
-        ForeignKey(
-            entity = ItemDespesaEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["itemDespesaId"],
-            onDelete = ForeignKey.CASCADE // Se o item de despesa for excluído, seus lançamentos também são
-        )
-    ]
-)
-data class LancamentoMensalDespesaEntity(
-    @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
 
-    @ColumnInfo(name = "itemDespesaId", index = true) // Chave estrangeira para ItemDespesaEntity
-    val itemDespesaId: Long,
+    @ColumnInfo(name = "nome")
+    val nome: String,
 
-    @ColumnInfo(name = "ano")
-    val ano: Int, // Ex: 2024
-
-    @ColumnInfo(name = "mes")
-    val mes: Int, // Ex: 4 (para Abril)
-
-    @ColumnInfo(name = "valor_semana1")
-    val valorSemana1: Double? = null, // Valores podem ser nulos se não houver despesa
-
-    @ColumnInfo(name = "valor_semana2")
-    val valorSemana2: Double? = null,
-
-    @ColumnInfo(name = "valor_semana3")
-    val valorSemana3: Double? = null,
-
-    @ColumnInfo(name = "valor_semana4")
-    val valorSemana4: Double? = null,
-
-    @ColumnInfo(name = "valor_semana5")
-    val valorSemana5: Double? = null, // Para meses com uma 5ª semana parcial
-
-    @ColumnInfo(name = "observacoes")
-    val observacoes: String? = null
-) {
-    // Função para calcular o total mensal (pode ser útil)
-    fun getTotalMensal(): Double {
-        return (valorSemana1 ?: 0.0) +
-                (valorSemana2 ?: 0.0) +
-                (valorSemana3 ?: 0.0) +
-                (valorSemana4 ?: 0.0) +
-                (valorSemana5 ?: 0.0)
-    }
-}
-data class DespesaMensalParaUi(
-    val itemDespesa: ItemDespesaEntity, // O tipo de despesa (ex: Gasolina)
-    var valorSemana1: String = "", // Valores como String para os TextFields
-    var valorSemana2: String = "",
-    var valorSemana3: String = "",
-    var valorSemana4: String = "",
-    var valorSemana5: String = "",
-    val idLancamentoExistente: Long? = null // ID do LancamentoMensalDespesaEntity se já existir
+    @ColumnInfo(name = "descricao")
+    val descricao: String? = null
 )
+
+// Entidade para os LANÇAMENTOS de despesa, agora vinculados a uma feira específica
 @Entity(
     tableName = "despesas_feira",
-    // Chave primária composta para garantir que um item de despesa só seja lançado uma vez por feira
-    // (se você permitir múltiplos lançamentos do mesmo item na mesma feira, use um id autogerado simples)
-    primaryKeys = ["feiraId", "itemDespesaId"],
+    primaryKeys = ["feiraId", "itemDespesaId"], // Chave primária composta
     foreignKeys = [
         ForeignKey(
             entity = FeiraEntity::class,
             parentColumns = ["feiraId"],
             childColumns = ["feiraId"],
-            onDelete = ForeignKey.CASCADE // Se a feira for deletada, suas despesas associadas também são
+            onDelete = ForeignKey.CASCADE
         ),
         ForeignKey(
             entity = ItemDespesaEntity::class,
             parentColumns = ["id"],
             childColumns = ["itemDespesaId"],
-            onDelete = ForeignKey.CASCADE // Se o tipo de despesa for deletado, seus lançamentos também são
+            onDelete = ForeignKey.CASCADE
         )
     ],
     indices = [Index(value = ["feiraId"]), Index(value = ["itemDespesaId"])]
@@ -110,22 +50,35 @@ data class DespesaFeiraEntity(
     @ColumnInfo(name = "itemDespesaId")
     val itemDespesaId: Long,
 
-    // Armazena um Map<String, Double> ("TER" to valor, "QUA" to valor, etc.)
-    // para os dias da semana da feira. Usará o mesmo MapStringDoubleConverter.
+    // Armazena um Map<String, Double> com valores diários em formato JSON
     @ColumnInfo(name = "valores_por_dia_json")
     val valoresPorDiaJson: String,
 
     @ColumnInfo(name = "observacao")
     val observacao: String? = null
-) {
-    // Função auxiliar para obter o total da despesa para esta feira/item
-    // (precisaria desserializar o JSON aqui, ou fazer isso no Repository/ViewModel)
-}
+)
+
+// Classe de dados para ajudar a gerenciar o estado na tela de lançamento (UI)
 data class DespesaFeiraUiItem(
     val itemDespesa: ItemDespesaEntity,
-    // Usaremos um MutableMap para que a UI possa alterar os valores diretamente
-    // As chaves serão os dias da semana (ex: "TER", "QUA")
-    val valoresPorDiaInput: MutableMap<String, String>,
+    val valoresPorDiaInput: MutableMap<String, String>, // Para os TextFields
     var observacaoInput: String,
-    val isExistingEntry: Boolean
+    val isExistingEntry: Boolean // Para saber se já existia um registro no banco
 )
+
+// Classe de dados para agrupar as informações para gerar o PDF mensal consolidado
+data class DadosPdfDespesasMensais(
+    val ano: Int,
+    val mes: Int,
+    val feirasDasSemanasDoMes: List<FairDetails>,
+    val despesasDeCadaFeiraDoMes: Map<String, List<DespesaFeiraEntity>>,
+    val todosOsItensDeDespesa: List<ItemDespesaEntity>
+)
+
+// Classe de estado para controlar a UI durante processos assíncronos (como gerar PDF)
+sealed class UiState<out T> {
+    object Idle : UiState<Nothing>() // Estado inicial ou ocioso
+    object Loading : UiState<Nothing>() // Estado de carregamento
+    data class Success<T>(val data: T) : UiState<T>() // Sucesso, contém os dados (ex: o arquivo PDF)
+    data class Error(val message: String) : UiState<Nothing>() // Falha, contém uma mensagem de erro
+}
