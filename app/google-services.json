@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "256637381786",
+    "project_id": "gestaofeiracooperativa",
+    "storage_bucket": "gestaofeiracooperativa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:256637381786:android:868f350a4a8f30f5230323",
+        "android_client_info": {
+          "package_name": "com.example.gestaofeiracooperativa"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAfFNZDPIBf1pWTXMsXdDLQTHEc5q7Sjdk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -31,12 +31,13 @@ interface FeiraDao {
     @Query("SELECT * FROM feiras WHERE SUBSTR(startDate, 4, 2) = :mesStr AND SUBSTR(startDate, 7, 4) = :anoStr ORDER BY startDate ASC")
     fun getFeirasByMesAno(mesStr: String, anoStr: String): Flow<List<FeiraEntity>>
 
-    @Query("""
-        SELECT * FROM feiras 
-        WHERE (SUBSTR(startDate, 7, 4) || '-' || SUBSTR(startDate, 4, 2) || '-' || SUBSTR(startDate, 1, 2)) 
-              < (SELECT SUBSTR(startDate, 7, 4) || '-' || SUBSTR(startDate, 4, 2) || '-' || SUBSTR(startDate, 1, 2) FROM feiras WHERE feiraId = :feiraIdAtual)
-        ORDER BY (SUBSTR(startDate, 7, 4) || '-' || SUBSTR(startDate, 4, 2) || '-' || SUBSTR(startDate, 1, 2)) DESC
-        LIMIT 1
-    """)
+    @Query("SELECT * FROM feiras WHERE feiraId = CAST(CAST(:feiraIdAtual AS INTEGER) - 1 AS TEXT)")
     suspend fun getFeiraAnterior(feiraIdAtual: String): FeiraEntity?
+
+    @Query("DELETE FROM feiras")
+    suspend fun deleteAllFeiras()
+
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllFeiras(feiras: List<FeiraEntity>)
 }

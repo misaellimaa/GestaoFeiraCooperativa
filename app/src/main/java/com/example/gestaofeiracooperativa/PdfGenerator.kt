@@ -260,78 +260,84 @@ object PdfGenerator {
         val pm = PageManager(document, pageInfo, headerPageHeight = 80f, footerPageHeight = 30f)
         val nomeAgricultorDisplay = agricultorInfo?.nome ?: "ID: ${resultadoAgricultor.agricultorId}"; val feiraId = feiraDetails.feiraId
 
+        // Definição das colunas da tabela
         val colWidths = listOf(CONTENT_WIDTH * 0.35f, CONTENT_WIDTH * 0.17f, CONTENT_WIDTH * 0.16f, CONTENT_WIDTH * 0.16f, CONTENT_WIDTH * 0.16f)
         val xPos = mutableListOf(MARGIN).apply { for(i in 0 until colWidths.size -1) add(last() + colWidths[i]) }
         val alignments = listOf(Paint.Align.LEFT) + List(4) { Paint.Align.RIGHT }
-        val headerTexts = listOf("Produto (#Nº)", "Entregue", "Perda Aloc.", "Vendido", "Valor Total")
+        val headerTexts = listOf("Produto (#Nº)", "Total Entregue", "Perda Aloc.", "Vendido", "Valor Total")
         val headerPaints = List(headerTexts.size) { TABLE_HEADER_PAINT }
 
+        // Callback para desenhar o cabeçalho em cada página
         pm.setNewPageCallback { _, pageMgr, pageNum ->
-            pageMgr.drawTextCenteredAndAdvance("Relatório do Agricultor" + if (pageNum > 1) " (Cont.)" else "", TITLE_PAINT, LINE_HEIGHT_TITLE_SECTION, yOffsetForBaseline = if (pageNum > 1) LINE_HEIGHT_SMALL else 0f)
-            pageMgr.drawTextCenteredAndAdvance("Feira Nº ${feiraDetails.feiraId} (${feiraDetails.startDate} a ${feiraDetails.endDate})", SUBTITLE_PAINT, LINE_HEIGHT_MEDIUM)
-            pageMgr.drawTextCenteredAndAdvance("Agricultor: $nomeAgricultorDisplay", SUBTITLE_PAINT, LINE_HEIGHT_MEDIUM)
-            pageMgr.advanceY(LINE_HEIGHT_MEDIUM / 2)
-            pageMgr.drawTextAndAdvance("Itens Processados:", MARGIN, SECTION_HEADER_PAINT, LINE_HEIGHT_MEDIUM)
+            pageMgr.drawTextCenteredAndAdvance("Relatório do Agricultor" + if (pageNum > 1) " (Cont.)" else "", TITLE_PAINT, lineHeight = LINE_HEIGHT_TITLE_SECTION)
+            pageMgr.drawTextCenteredAndAdvance("Feira Nº ${feiraDetails.feiraId} (${feiraDetails.startDate} a ${feiraDetails.endDate})", SUBTITLE_PAINT)
+            pageMgr.drawTextCenteredAndAdvance("Agricultor: $nomeAgricultorDisplay", SUBTITLE_PAINT, lineHeight = LINE_HEIGHT_LARGE)
+            pageMgr.drawTextAndAdvance("Itens Processados:", MARGIN, SECTION_HEADER_PAINT)
             pageMgr.advanceY(LINE_HEIGHT_EXTRA_SMALL)
             drawPdfTableRow(pageMgr, headerTexts, xPos, colWidths, alignments, headerPaints, rowBaseLineHeight = LINE_HEIGHT_TABLE_HEADER, firstColumnTextWrap = true)
-            pageMgr.drawLineSeparator(LINE_HEIGHT_SMALL / 2)
+            pageMgr.drawLineSeparator()
         }
 
         if (resultadoAgricultor.itensProcessados.isEmpty()){
             pm.drawTextAndAdvance("Nenhum item processado.", MARGIN + CELL_PADDING_DEFAULT, ITALIC_TEXT_PAINT)
         } else {
             resultadoAgricultor.itensProcessados.forEach { item ->
-                // <<< ALTERAÇÃO: Constrói a linha com o novo 'contribuicaoTotal' >>>
-                val contribuicaoTotalTexto = "${formatQuantity(item.contribuicaoTotal)} ${item.produto.unidade}"
+                // <<< CORREÇÃO PRINCIPAL AQUI >>>
 
-                // <<< NOVO: Texto de detalhe para mostrar a composição >>>
+                // Acesso seguro às propriedades do produto
+                val nomeProduto = item.produto?.item ?: "Produto Inválido"
+                val numeroProduto = item.produto?.numero ?: ""
+                val unidadeProduto = item.produto?.unidade ?: "unid."
+                val valorUnitario = item.produto?.valorUnidade ?: 0.0
+
+                // Usa o novo campo 'contribuicaoTotal'
+                val contribuicaoTotalTexto = "${formatQuantity(item.contribuicaoTotal)} $unidadeProduto"
+
+                // Cria o texto de detalhe para a sobra
                 val detalheContribuicao = if (item.quantidadeSobraAnterior > 0)
                     "(Sobra: ${formatQuantity(item.quantidadeSobraAnterior)} + Semana: ${formatQuantity(item.quantidadeEntradaSemana)})"
                 else ""
 
+                // Constrói a linha principal da tabela
                 val rowData = listOf(
-                    "${item.produto.item} (#${item.produto.numero})",
+                    "$nomeProduto (#$numeroProduto)",
                     contribuicaoTotalTexto,
                     formatQuantity(item.quantidadePerdaAlocada),
                     formatQuantity(item.quantidadeVendida),
                     formatCurrency(item.valorTotalVendido)
                 )
-                val dataPaints = listOf(NORMAL_TEXT_PAINT, NORMAL_TEXT_PAINT, NORMAL_TEXT_PAINT, NORMAL_TEXT_PAINT, BOLD_TEXT_PAINT)
+
+                val dataPaints = List(4) { NORMAL_TEXT_PAINT } + listOf(BOLD_TEXT_PAINT)
                 drawPdfTableRow(pm, rowData, xPos, colWidths, alignments, dataPaints, firstColumnTextWrap = true)
 
-                // Adiciona a linha de detalhe se houver sobra
+                // Adiciona a linha de detalhe extra, se houver sobra
                 if (detalheContribuicao.isNotEmpty()) {
-                    // Desenha o detalhe abaixo da linha principal, na coluna de "Total Entregue"
-                    pm.drawTextAndAdvance(detalheContribuicao, xPos[1] + CELL_PADDING_DEFAULT, ITALIC_TEXT_PAINT, lineHeight = LINE_HEIGHT_SMALL, yOffsetForBaseline = -LINE_HEIGHT_EXTRA_SMALL/2)
+                    // Desenha o detalhe abaixo da linha principal, com um pequeno recuo e em itálico
+                    // O yOffset negativo sobe um pouco o texto para ficar mais perto da linha de cima
+                    pm.drawTextAndAdvance(detalheContribuicao, xPos[0] + CELL_PADDING_DEFAULT + 10f, ITALIC_TEXT_PAINT, lineHeight = LINE_HEIGHT_SMALL, yOffsetForBaseline = -4f)
                 }
             }
         }
         pm.drawLineSeparator()
 
+        // Resumo Financeiro (sem alterações aqui, já estava correto)
         pm.advanceY(LINE_HEIGHT_SMALL)
         pm.drawTextAndAdvance("Resumo Financeiro:", MARGIN, SECTION_HEADER_PAINT, LINE_HEIGHT_MEDIUM)
         pm.advanceY(LINE_HEIGHT_SMALL / 2)
-
-        val xLabel = MARGIN
-        val xValue = CONTENT_WIDTH + MARGIN - CELL_PADDING_DEFAULT
-        val summaryItems = listOf(
-            "Total Bruto Agricultor:" to resultadoAgricultor.totalVendidoBrutoAgricultor,
-            "Valor Cooperativa (30%):" to resultadoAgricultor.valorCooperativa,
-            "Valor Líquido Agricultor (70%):" to resultadoAgricultor.valorLiquidoAgricultor
-        )
+        val xLabel = MARGIN; val xValue = CONTENT_WIDTH + MARGIN - CELL_PADDING_DEFAULT
+        val summaryItems = listOf("Total Bruto Agricultor:" to resultadoAgricultor.totalVendidoBrutoAgricultor, "Valor Cooperativa (30%):" to resultadoAgricultor.valorCooperativa, "Valor Líquido Agricultor (70%):" to resultadoAgricultor.valorLiquidoAgricultor)
         summaryItems.forEach { (label, value) ->
             pm.checkAndAddNewPageIfNeeded(LINE_HEIGHT_NORMAL)
-            val yForRow = pm.currentY // Salva o Y antes de desenhar os textos da linha
-            pm.drawTextOnLine(label, xLabel, BOLD_TEXT_PAINT, yForTextBaseline = yForRow + (BOLD_TEXT_PAINT.textSize - BOLD_TEXT_PAINT.descent()))
-            val originalAlign = BOLD_TEXT_PAINT.textAlign
-            BOLD_TEXT_PAINT.textAlign = Paint.Align.RIGHT
-            pm.drawTextOnLine(formatCurrency(value), xValue, BOLD_TEXT_PAINT, yForTextBaseline = yForRow + (BOLD_TEXT_PAINT.textSize - BOLD_TEXT_PAINT.descent()))
-            BOLD_TEXT_PAINT.textAlign = originalAlign
-            pm.advanceY(LINE_HEIGHT_NORMAL)
+            val yForRow = pm.currentY
+            val textBaselineY = yForRow + (BOLD_TEXT_PAINT.textSize - BOLD_TEXT_PAINT.descent())
+            pm.drawTextOnLine(label, xLabel, BOLD_TEXT_PAINT, yForTextBaseline = textBaselineY)
+            val originalAlign = BOLD_TEXT_PAINT.textAlign; BOLD_TEXT_PAINT.textAlign = Paint.Align.RIGHT
+            pm.drawTextOnLine(formatCurrency(value), xValue, BOLD_TEXT_PAINT, yForTextBaseline = textBaselineY)
+            BOLD_TEXT_PAINT.textAlign = originalAlign; pm.advanceY(LINE_HEIGHT_NORMAL)
         }
 
         pm.finishDocument(context, "Feira ${feiraId} - ${nomeAgricultorDisplay}")
-        val file = File(getPdfOutputDir(context), "Relatorio_Agricultor_${agricultorInfo?.id ?: resultadoAgricultor.agricultorId}_Feira_${feiraDetails.feiraId}.pdf")
+        val file = File(getPdfOutputDir(context), "Relatorio_Agricultor_${agricultorInfo?.id ?: resultadoAgricultor.agricultorId}_Feira_${feiraId}.pdf")
         try { FileOutputStream(file).use { fos -> document.writeTo(fos) }; return file }
         catch (e: IOException) { e.printStackTrace(); throw e }
         finally { document.close() }

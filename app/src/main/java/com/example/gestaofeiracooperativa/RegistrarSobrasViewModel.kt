@@ -7,24 +7,15 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.serializer
 import java.text.DecimalFormat
-import java.util.Locale
-
-// Seus imports...
 
 class RegistrarSobrasViewModel(
-    private val feiraIdAtual: String, // ID da feira de DESTINO
+    private val feiraIdAtual: String,
     private val feiraRepository: FeiraRepository,
     private val produtoRepository: ProdutoRepository,
     private val perdaRepository: PerdaRepository,
     private val entradaRepository: EntradaRepository
 ) : ViewModel() {
-
-    private val _uiState = MutableStateFlow<UiState<Unit>>(UiState.Idle)
-    val uiState: StateFlow<UiState<Unit>> = _uiState.asStateFlow()
 
     private val _feiraAnteriorId = MutableStateFlow<String?>(null)
     val feiraAnteriorId: StateFlow<String?> = _feiraAnteriorId.asStateFlow()
@@ -62,95 +53,69 @@ class RegistrarSobrasViewModel(
         }
     }
 
-    // <<< FUNÇÃO PRINCIPAL REATORADA E CORRIGIDA >>>
-    fun distribuirSobras(listaSobrasUi: List<SobraUiItem>) {
-        val idFeiraOrigem = _feiraAnteriorId.value
-        if (idFeiraOrigem == null) {
-            viewModelScope.launch { _uiState.value = UiState.Error("Nenhuma feira anterior encontrada para buscar sobras.") }
-            return
+    suspend fun calcularDistribuicao(
+        listaSobrasUi: List<SobraUiItem>,
+        entradasAtuaisDestino: Map<String, List<EntradaItemAgricultor>>
+    ): Map<String, List<EntradaItemAgricultor>> {
+        val idFeiraOrigem = _feiraAnteriorId.value ?: return entradasAtuaisDestino
+
+        val mapaEntradasAtualizado = mutableMapOf<String, MutableList<EntradaItemAgricultor>>()
+        entradasAtuaisDestino.forEach { (agricultorId, entradas) ->
+            mapaEntradasAtualizado[agricultorId] = entradas.toMutableList()
         }
 
-        viewModelScope.launch {
-            _uiState.value = UiState.Loading
-            try {
-                // Prepara todas as alterações necessárias em memória primeiro
+        listaSobrasUi.forEach { itemUi ->
+            val sobraReal = itemUi.sobraRealInput.replace(',', '.').toDoubleOrNull() ?: 0.0
+            if (sobraReal > 0) {
+                val produto = itemUi.produto // O produto da sobra
+                val produtoNumero = produto.numero
+                val entradasOrigem = entradaRepository.getEntradasForFeira(idFeiraOrigem).firstOrNull()
+                    ?.filter { it.produtoNumero == produtoNumero } ?: emptyList()
 
-                // 1. Lista de PerdaEntity da feira de ORIGEM a serem atualizadas com a sobra real
-                val perdasParaAtualizar = listaSobrasUi.map { itemUi ->
-                    val sobraReal = itemUi.sobraRealInput.replace(',', '.').toDoubleOrNull() ?: 0.0
-                    itemUi.perdaEntityOriginal.copy(quantidadeSobra = sobraReal)
+                var totalEntregueOrigem = 0.0
+                entradasOrigem.forEach { entrada ->
+                    val quantidadesMap = try { Json.decodeFromString<Map<String, Double>>(entrada.quantidadesPorDiaJson) } catch (e: Exception) { emptyMap() }
+                    totalEntregueOrigem += quantidadesMap.values.sum()
                 }
 
-                // 2. Mapa de EntradaEntity da feira de DESTINO a serem inseridas/atualizadas
-                val entradasParaAtualizarOuInserir = mutableMapOf<String, EntradaEntity>()
+                if (totalEntregueOrigem > 0) {
+                    entradasOrigem.forEach { entradaOrigem ->
+                        val quantidadesMap = try { Json.decodeFromString<Map<String, Double>>(entradaOrigem.quantidadesPorDiaJson) } catch (e: Exception) { emptyMap() }
+                        val entreguePeloAgricultor = quantidadesMap.values.sum()
+                        val proporcao = entreguePeloAgricultor / totalEntregueOrigem
+                        val sobraDistribuida = sobraReal * proporcao
 
-                // Busca todas as entradas da feira de destino UMA VEZ para evitar múltiplas chamadas ao DB
-                val entradasDestinoExistentes = entradaRepository.getEntradasForFeira(feiraIdAtual).firstOrNull() ?: emptyList()
+                        val agricultorId = entradaOrigem.agricultorId
+                        val listaEntradasDestino = mapaEntradasAtualizado.getOrPut(agricultorId) { mutableListOf() }
 
-                // Primeiro, popula o mapa com as entradas existentes, resetando a sobra
-                entradasDestinoExistentes.forEach { entrada ->
-                    val chave = "${entrada.agricultorId}-${entrada.produtoNumero}"
-                    entradasParaAtualizarOuInserir[chave] = entrada.copy(quantidadeSobra = 0.0)
-                }
+                        // <<< CORREÇÃO AQUI: Usa acesso seguro '?.' >>>
+                        val entradaExistenteIndex = listaEntradasDestino.indexOfFirst { it.produto?.numero == produtoNumero }
 
-                // Agora, calcula a distribuição e atualiza o mapa
-                listaSobrasUi.forEach { itemUi ->
-                    val sobraReal = itemUi.sobraRealInput.replace(',', '.').toDoubleOrNull() ?: 0.0
-                    if (sobraReal > 0) {
-                        val produtoNumero = itemUi.produto.numero
-                        val entradasOrigem = entradaRepository.getEntradasForFeira(idFeiraOrigem).firstOrNull()
-                            ?.filter { it.produtoNumero == produtoNumero } ?: emptyList()
-
-                        var totalEntregueOrigem = 0.0
-                        entradasOrigem.forEach { entrada ->
-                            val quantidadesMap = try { Json.decodeFromString<Map<String, Double>>(entrada.quantidadesPorDiaJson) } catch (e: Exception) { emptyMap() }
-                            totalEntregueOrigem += quantidadesMap.values.sum()
-                        }
-
-                        if (totalEntregueOrigem > 0) {
-                            entradasOrigem.forEach { entradaOrigem ->
-                                val quantidadesMap = try { Json.decodeFromString<Map<String, Double>>(entradaOrigem.quantidadesPorDiaJson) } catch (e: Exception) { emptyMap() }
-                                val entreguePeloAgricultor = quantidadesMap.values.sum()
-                                val proporcao = entreguePeloAgricultor / totalEntregueOrigem
-                                val sobraDistribuida = sobraReal * proporcao
-
-                                // Atualiza ou cria a entrada no mapa em memória
-                                val chave = "${entradaOrigem.agricultorId}-${produtoNumero}"
-                                val entradaNoDestino = entradasParaAtualizarOuInserir[chave]
-                                if (entradaNoDestino != null) {
-                                    entradasParaAtualizarOuInserir[chave] = entradaNoDestino.copy(quantidadeSobra = sobraDistribuida)
-                                } else {
-                                    entradasParaAtualizarOuInserir[chave] = EntradaEntity(
-                                        feiraId = feiraIdAtual,
-                                        agricultorId = entradaOrigem.agricultorId,
-                                        produtoNumero = produtoNumero,
-                                        quantidadeSobra = sobraDistribuida,
-                                        quantidadesPorDiaJson = "{}"
-                                    )
-                                }
-                            }
+                        if (entradaExistenteIndex != -1) {
+                            // Se já existe uma entrada para este produto, atualiza a sobra
+                            val entradaAntiga = listaEntradasDestino[entradaExistenteIndex]
+                            listaEntradasDestino[entradaExistenteIndex] = entradaAntiga.copy(quantidadeSobraDaSemanaAnterior = sobraDistribuida)
+                        } else {
+                            // Se não existe, cria uma nova entrada
+                            listaEntradasDestino.add(
+                                EntradaItemAgricultor(
+                                    produto = produto,
+                                    quantidadeSobraDaSemanaAnterior = sobraDistribuida,
+                                    quantidadesPorDia = emptyMap()
+                                )
+                            )
                         }
                     }
                 }
-
-                // 3. Executa todas as operações de banco de dados em uma única transação no repositório
-                feiraRepository.executarDistribuicaoDeSobras(perdasParaAtualizar, entradasParaAtualizarOuInserir.values.toList())
-
-                _uiState.value = UiState.Success(Unit)
-
-            } catch (e: Exception) {
-                Log.e("RegistrarSobrasVM", "Erro ao distribuir sobras.", e)
-                _uiState.value = UiState.Error("Erro ao distribuir sobras: ${e.message}")
             }
         }
+        return mapaEntradasAtualizado
     }
 
-    fun resetState() { _uiState.value = UiState.Idle }
     private fun formatDouble(value: Double): String {
-        return DecimalFormat("#,##0.00").format(value)
+        return if (value % 1.0 == 0.0) value.toInt().toString() else DecimalFormat("#,##0.00").format(value)
     }
 }
-
 
 class RegistrarSobrasViewModelFactory(
     private val feiraIdAtual: String,

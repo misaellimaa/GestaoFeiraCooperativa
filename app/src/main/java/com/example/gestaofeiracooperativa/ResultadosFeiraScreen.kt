@@ -1,260 +1,171 @@
 package com.example.gestaofeiracooperativa
 
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import java.io.File
-import java.util.Locale // <<< NOVO IMPORT para Locale
-import androidx.compose.ui.graphics.Color
+import java.util.Locale
 
-// <<< NOVO IMPORT: Precisa da definição de Agricultor >>>
+// Seus imports...
+import com.example.gestaofeiracooperativa.StandardTopAppBar
+import com.example.gestaofeiracooperativa.ResultadoGeralFeira
+import com.example.gestaofeiracooperativa.Agricultor
+import com.example.gestaofeiracooperativa.formatQuantity
+import com.example.gestaofeiracooperativa.formatCurrency
+import com.example.gestaofeiracooperativa.PdfGenerator
+import com.example.gestaofeiracooperativa.compartilharPdf
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultadosFeiraScreen(
     resultadoGeralFeira: ResultadoGeralFeira,
-    listaDeAgricultores: List<Agricultor>, // <<< NOVO PARÂMETRO: Lista de todos os agricultores
+    listaDeAgricultores: List<Agricultor>,
     onVoltar: () -> Unit,
     onSalvarFeira: () -> Unit
 ) {
     val context = LocalContext.current
 
-    fun compartilharPdf(pdfFile: File, feiraId: String, titulo: String) {
-        // ... (função compartilharPdf permanece a mesma)
-        if (pdfFile.exists() && pdfFile.canRead()) {
-            try {
-                val uri = FileProvider.getUriForFile(
-                    context,
-                    context.applicationContext.packageName + ".provider",
-                    pdfFile
-                )
-                val shareIntent: Intent = Intent().apply {
-                    action = Intent.ACTION_SEND
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    type = "application/pdf"
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                context.startActivity(Intent.createChooser(shareIntent, titulo))
-            } catch (e: Exception) {
-                Toast.makeText(context, "Erro ao compartilhar PDF: ${e.message}", Toast.LENGTH_LONG).show()
-                e.printStackTrace()
-            }
-        } else {
-            Toast.makeText(context, "Arquivo PDF não encontrado ou não pode ser lido.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     Scaffold(
         topBar = {
             StandardTopAppBar(
-                title = "Resultados da Feira Nº ${resultadoGeralFeira.fairDetails.feiraId}",
+                title = "Resultados Feira Nº ${resultadoGeralFeira.fairDetails.feiraId}",
                 canNavigateBack = true,
-                onNavigateBack = { onVoltar() },
-                actions = { // Início do lambda para 'actions'
-
-                    // Botão Exportar PDF Geral
+                onNavigateBack = onVoltar, // Usa o callback passado
+                actions = {
+                    // <<< Botão SALVAR adicionado de volta >>>
+                    IconButton(onClick = onSalvarFeira) {
+                        Icon(Icons.Filled.Save, contentDescription = "Salvar Feira e Resultados")
+                    }
+                    // Botão para gerar o PDF de Resumo Geral
                     IconButton(onClick = {
                         try {
-                            // Certifique-se que 'listaDeAgricultores' está acessível aqui.
-                            // Ela é um parâmetro de ResultadosFeiraScreen.
-                            val pdfFile = PdfGenerator.generateSummaryPdf(
-                                context,
-                                resultadoGeralFeira,
-                                listaDeAgricultores // Passando a lista de agricultores
-                            )
-                            // A função compartilharPdf já está definida dentro de ResultadosFeiraScreen
-                            compartilharPdf(
-                                pdfFile,
-                                resultadoGeralFeira.fairDetails.feiraId,
-                                "Resumo da Feira ${resultadoGeralFeira.fairDetails.feiraId}"
-                            )
+                            val pdfFile = PdfGenerator.generateSummaryPdf(context, resultadoGeralFeira, listaDeAgricultores)
+                            // <<< CHAMADA CORRIGIDA para a função compartilharPdf >>>
+                            val authorityString = context.applicationContext.packageName + ".provider"
+                            val chooserTitle = "Resumo da Feira ${resultadoGeralFeira.fairDetails.feiraId}"
+                            compartilharPdf(context, pdfFile, authorityString, chooserTitle)
                         } catch (e: Exception) {
                             Toast.makeText(context, "Erro ao gerar PDF Geral: ${e.message}", Toast.LENGTH_LONG).show()
-                            e.printStackTrace()
                         }
                     }) {
-                        Icon(
-                            imageVector = Icons.Filled.PictureAsPdf,
-                            contentDescription = "Exportar Resumo Geral PDF"
-                        )
+                        Icon(Icons.Filled.PictureAsPdf, contentDescription = "Exportar Resumo Geral PDF")
                     }
-                } // Fim do lambda para 'actions'
-
+                }
             )
         }
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier
-                .padding(innerPadding)
-                .padding(16.dp),
+            modifier = Modifier.padding(innerPadding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Cabeçalho Geral
+            // Card de Resumo Geral Financeiro
             item {
                 Card(elevation = CardDefaults.cardElevation(4.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        // ... (Text "Resumo Geral da Feira", Período, e os InfoLinha para totais gerais como antes) ...
                         Text("Resumo Geral da Feira", style = MaterialTheme.typography.titleLarge, modifier = Modifier.align(Alignment.CenterHorizontally))
-                        Text("Período: ${resultadoGeralFeira.fairDetails.startDate} a ${resultadoGeralFeira.fairDetails.endDate}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp)
-                        )
-                        // <<< INÍCIO DA SEÇÃO MODIFICADA PARA LISTA DE AGRICULTORES E SEUS VALORES >>>
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Divider()
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            // <<< ALTERAÇÃO NO TÍTULO PARA REFLETIR A NOVA ORDEM >>>
-                            "Resumo por Agricultor (Cooperativa / Líquido):",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
+                        Text("Período: ${resultadoGeralFeira.fairDetails.startDate} a ${resultadoGeralFeira.fairDetails.endDate}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp))
 
+                        Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                        // Tabela de Resumo por Agricultor
+                        Text("Resumo por Agricultor (Líquido / Cooperativa):", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
                         if (resultadoGeralFeira.resultadosPorAgricultor.isEmpty()) {
-                            Text(
-                                "Nenhum agricultor com movimentação para exibir neste resumo.",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                            Text("Nenhum agricultor com resultados para exibir.", style = MaterialTheme.typography.bodyMedium)
                         } else {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                // Cabeçalho da mini-lista (opcional, com ordem ajustada)
                                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
                                     Text("Agricultor", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(0.5f), fontWeight = FontWeight.Bold)
-                                    // <<< ALTERAÇÃO NA ORDEM DO CABEÇALHO >>>
-                                    Text("Valor Coop. (30%)", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(0.25f), fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.End)
-                                    Text("Valor Líquido (70%)", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(0.25f), fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                                    Text("Valor Líquido (70%)", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(0.25f), fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                                    Text("Valor Coop. (30%)", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(0.25f), fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
                                 }
-
                                 resultadoGeralFeira.resultadosPorAgricultor.forEach { resAgricultor ->
-                                    val agricultorInfo = listaDeAgricultores.find { it.id == resAgricultor.agricultorId }
-                                    val nomeDisplay = agricultorInfo?.nome ?: "ID: ${resAgricultor.agricultorId}"
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = nomeDisplay,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            modifier = Modifier.weight(0.5f),
-                                            maxLines = 1,
-                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                        )
-                                        // <<< ALTERAÇÃO: Valor Cooperativa (30%) primeiro e com cor padrão >>>
-                                        Text(
-                                            text = "R$ ${String.format(Locale.getDefault(), "%.2f", resAgricultor.valorCooperativa).replace('.', ',')}",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            modifier = Modifier.weight(0.25f).padding(start = 4.dp),
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                                            color = LocalContentColor.current // Cor padrão do texto
-                                        )
-                                        // <<< ALTERAÇÃO: Valor Líquido (70%) depois e com cor verde >>>
-                                        Text(
-                                            text = "R$ ${String.format(Locale.getDefault(), "%.2f", resAgricultor.valorLiquidoAgricultor).replace('.', ',')}",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            modifier = Modifier.weight(0.25f).padding(start = 4.dp),
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                                            color = Color(0xFF008000) // Verde (0xFF006400 para um verde mais escuro)
-                                            // Ou use uma cor do seu tema se tiver: MaterialTheme.colorScheme.tertiary
-                                        )
+                                    val nomeDisplay = listaDeAgricultores.find { it.id == resAgricultor.agricultorId }?.nome ?: "ID: ${resAgricultor.agricultorId}"
+                                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(text = nomeDisplay, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(0.5f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(text = formatCurrency(resAgricultor.valorLiquidoAgricultor), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(0.25f).padding(start = 4.dp), textAlign = TextAlign.End, color = Color(0xFF008000))
+                                        Text(text = formatCurrency(resAgricultor.valorCooperativa), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(0.25f).padding(start = 4.dp), textAlign = TextAlign.End, color = LocalContentColor.current)
                                     }
                                 }
                             }
                         }
-                        // <<< FIM DA SEÇÃO MODIFICADA >>>
-                        Divider()
-                        Spacer(modifier = Modifier.height(8.dp))
-                        InfoLinha(label = "Total Geral Vendido:", valor = "R$ ${String.format(Locale.getDefault(), "%.2f", resultadoGeralFeira.totalGeralVendido).replace('.', ',')}")
-                        InfoLinha(label = "Total para Cooperativa (30%):", valor = "R$ ${String.format(Locale.getDefault(), "%.2f", resultadoGeralFeira.totalGeralCooperativa).replace('.', ',')}")
-                        InfoLinha(label = "Total para Agricultores (70%):", valor = "R$ ${String.format(Locale.getDefault(), "%.2f", resultadoGeralFeira.totalGeralAgricultores).replace('.', ',')}")// <<< FIM DA NOVA SEÇÃO >>>
+
+                        Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                        // Totais Gerais
+                        InfoLinha(label = "Total Geral Vendido:", valor = formatCurrency(resultadoGeralFeira.totalGeralVendido), isTotal = true)
+                        InfoLinha(label = "Total para Cooperativa (30%):", valor = formatCurrency(resultadoGeralFeira.totalGeralCooperativa), isTotal = true)
+                        InfoLinha(label = "Total para Agricultores (70%):", valor = formatCurrency(resultadoGeralFeira.totalGeralAgricultores), isTotal = true)
                     }
                 }
             }
 
             item {
-                Text(
-                    "Detalhes por Agricultor:",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                )
+                Text("Detalhes por Agricultor:", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
             }
 
-            // Detalhes por agricultor
+            // Lista de Detalhes por Agricultor
             items(resultadoGeralFeira.resultadosPorAgricultor, key = { it.agricultorId }) { resultadoAgricultor ->
-                // <<< NOVO: Buscar nome do agricultor >>>
                 val agricultorInfo = listaDeAgricultores.find { it.id == resultadoAgricultor.agricultorId }
                 val nomeDisplayAgricultor = agricultorInfo?.nome ?: "ID: ${resultadoAgricultor.agricultorId}"
 
-                Card(
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant) // Suaviza o card
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) { // Aumenta padding interno
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // <<< ALTERAÇÃO: Mostra o nome do agricultor >>>
-                            Text(
-                                text = nomeDisplayAgricultor,
-                                style = MaterialTheme.typography.titleMedium, // Um pouco maior
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f)
-                            )
+                Card(elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = nomeDisplayAgricultor, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                             IconButton(onClick = {
                                 try {
-                                    // Passa agricultorInfo para ter o nome no PDF individual
                                     val pdfFile = PdfGenerator.generateAgricultorPdf(context, resultadoAgricultor, resultadoGeralFeira.fairDetails, agricultorInfo)
-                                    compartilharPdf(pdfFile, resultadoGeralFeira.fairDetails.feiraId, "Relatório ${nomeDisplayAgricultor} Feira ${resultadoGeralFeira.fairDetails.feiraId}")
+                                    val authorityString = context.applicationContext.packageName + ".provider"
+                                    val chooserTitle = "Resumo da Feira ${resultadoGeralFeira.fairDetails.feiraId}"
+                                    compartilharPdf(context, pdfFile, authorityString, chooserTitle)
+
                                 } catch (e: Exception) {
                                     Toast.makeText(context, "Erro ao gerar PDF do Agricultor: ${e.message}", Toast.LENGTH_LONG).show()
-                                    e.printStackTrace()
                                 }
-                            }) {
-                                Icon(Icons.Filled.PictureAsPdf, contentDescription = "Exportar PDF Agricultor ${nomeDisplayAgricultor}")
-                            }
+                            }) { Icon(Icons.Filled.PictureAsPdf, contentDescription = "Exportar PDF Agricultor ${nomeDisplayAgricultor}") }
                         }
-                        Spacer(modifier = Modifier.height(10.dp)) // Aumenta o espaço
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        // <<< ALTERAÇÃO: Melhoria na exibição dos itens processados >>>
                         if (resultadoAgricultor.itensProcessados.isEmpty()) {
                             Text("Nenhum item processado para este agricultor.", style = MaterialTheme.typography.bodyMedium)
                         } else {
                             resultadoAgricultor.itensProcessados.forEach { item ->
-                                // <<< INÍCIO DA ALTERAÇÃO NA EXIBIÇÃO DOS ITENS >>>
+                                // <<< SEÇÃO DE ITENS PROCESSADOS CORRIGIDA E ATUALIZADA >>>
                                 Column(modifier = Modifier.padding(bottom = 8.dp)) {
-                                    Text("${item.produto.item} (#${item.produto.numero})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-
+                                    // Acesso seguro ao produto
+                                    Text("${item.produto?.item ?: "Produto Inválido"} (#${item.produto?.numero})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                     Spacer(modifier = Modifier.height(4.dp))
 
                                     // Mostra o total geral entregue
                                     InfoLinha(
-                                        label = "Total Entregue:",
-                                        valor = "${formatQuantity(item.contribuicaoTotal)} ${item.produto.unidade}",
-                                        isBold = true // Destaca a linha do total
+                                        label = "  Total Entregue:",
+                                        valor = "${formatQuantity(item.contribuicaoTotal)} ${item.produto?.unidade ?: ""}",
+                                        isBold = true // Destaca a linha
                                     )
 
                                     // Mostra o detalhe da composição, se houver sobra
                                     if (item.quantidadeSobraAnterior > 0) {
                                         Text(
-                                            text = " (Sobra: ${formatQuantity(item.quantidadeSobraAnterior)} + Semana: ${formatQuantity(item.quantidadeEntradaSemana)})",
+                                            text = "   (Sobra: ${formatQuantity(item.quantidadeSobraAnterior)} + Semana: ${formatQuantity(item.quantidadeEntradaSemana)})",
                                             style = MaterialTheme.typography.bodySmall,
                                             modifier = Modifier.padding(start = 8.dp)
                                         )
@@ -262,21 +173,18 @@ fun ResultadosFeiraScreen(
 
                                     Spacer(modifier = Modifier.height(4.dp))
 
-                                    InfoLinha(label = "  Perda Alocada:", valor = "${formatQuantity(item.quantidadePerdaAlocada)} ${item.produto.unidade}")
-                                    InfoLinha(label = "  Vendido:", valor = "${formatQuantity(item.quantidadeVendida)} ${item.produto.unidade}")
+                                    InfoLinha(label = "  Perda Alocada:", valor = "${formatQuantity(item.quantidadePerdaAlocada)} ${item.produto?.unidade ?: ""}")
+                                    InfoLinha(label = "  Vendido:", valor = "${formatQuantity(item.quantidadeVendida)} ${item.produto?.unidade ?: ""}")
                                     InfoLinha(label = "  Valor Vendido:", valor = formatCurrency(item.valorTotalVendido))
                                 }
                                 Divider(modifier = Modifier.padding(vertical = 4.dp))
-                                // <<< FIM DA ALTERAÇÃO NA EXIBIÇÃO DOS ITENS >>>
                             }
                         }
 
-                        // Totais do Agricultor (mantendo o Divider antes)
-                        // O Divider anterior já serve para separar o último produto dos totais.
-                        // Spacer(modifier = Modifier.height(4.dp)) // Ajuste se necessário
-                        InfoLinha(label = "Total Bruto Agricultor:", valor = "R$ ${String.format(Locale.getDefault(), "%.2f", resultadoAgricultor.totalVendidoBrutoAgricultor).replace('.', ',')}")
-                        InfoLinha(label = "Valor Cooperativa (30%):", valor = "R$ ${String.format(Locale.getDefault(), "%.2f", resultadoAgricultor.valorCooperativa).replace('.', ',')}")
-                        InfoLinha(label = "Valor Líquido Agricultor (70%):", valor = "R$ ${String.format(Locale.getDefault(), "%.2f", resultadoAgricultor.valorLiquidoAgricultor).replace('.', ',')}", isTotal = true)
+                        // Totais financeiros do agricultor
+                        InfoLinha(label = "Total Bruto Agricultor:", valor = formatCurrency(resultadoAgricultor.totalVendidoBrutoAgricultor), isTotal = true)
+                        InfoLinha(label = "Valor Cooperativa (30%):", valor = formatCurrency(resultadoAgricultor.valorCooperativa), isTotal = true)
+                        InfoLinha(label = "Valor Líquido Agricultor (70%):", valor = formatCurrency(resultadoAgricultor.valorLiquidoAgricultor), isTotal = true)
                     }
                 }
             }
@@ -284,6 +192,7 @@ fun ResultadosFeiraScreen(
     }
 }
 
+// <<< FUNÇÃO InfoLinha ATUALIZADA >>>
 @Composable
 fun InfoLinha(
     label: String,
@@ -292,10 +201,13 @@ fun InfoLinha(
     isBold: Boolean = false
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), // Pequeno padding vertical
-        horizontalArrangement = Arrangement.SpaceBetween
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, fontWeight = if (isTotal) FontWeight.Bold else FontWeight.Normal, style = MaterialTheme.typography.bodyMedium)
-        Text(valor, fontWeight = if (isTotal) FontWeight.Bold else FontWeight.Normal, style = if(isTotal) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium)
+        val fontWeight = if (isTotal || isBold) FontWeight.Bold else FontWeight.Normal
+        val style = if(isTotal) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium
+        Text(text = label, fontWeight = fontWeight, style = style)
+        Text(text = valor, fontWeight = fontWeight, style = style)
     }
 }

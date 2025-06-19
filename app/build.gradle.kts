@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.compose.compiler) // Alterado de 'kotlin.compose' para o alias correto do plugin Compose Compiler
     alias(libs.plugins.google.android.libraries.mapsplatform.secrets.gradle.plugin)
     alias(libs.plugins.ksp)
+    id("com.google.gms.google-services")
 }
 
 
@@ -97,4 +98,7 @@ dependencies {
 
     // Layouts
     implementation("androidx.compose.foundation:foundation-layout:1.6.7")
+
+    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
+    implementation("com.google.firebase:firebase-firestore-ktx")
 }

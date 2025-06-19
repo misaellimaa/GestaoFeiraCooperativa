@@ -17,7 +17,7 @@ data class ItemDespesaEntity(
     val id: Long = 0,
 
     @ColumnInfo(name = "nome")
-    val nome: String,
+    val nome: String = "",
 
     @ColumnInfo(name = "descricao")
     val descricao: String? = null
@@ -45,14 +45,13 @@ data class ItemDespesaEntity(
 )
 data class DespesaFeiraEntity(
     @ColumnInfo(name = "feiraId")
-    val feiraId: String,
+    val feiraId: String = "", // <<< CORREÇÃO: Adicionado valor padrão
 
     @ColumnInfo(name = "itemDespesaId")
-    val itemDespesaId: Long,
+    val itemDespesaId: Long = 0, // <<< CORREÇÃO: Adicionado valor padrão
 
-    // Armazena um Map<String, Double> com valores diários em formato JSON
     @ColumnInfo(name = "valores_por_dia_json")
-    val valoresPorDiaJson: String,
+    val valoresPorDiaJson: String = "{}",
 
     @ColumnInfo(name = "observacao")
     val observacao: String? = null
@@ -60,19 +59,19 @@ data class DespesaFeiraEntity(
 
 // Classe de dados para ajudar a gerenciar o estado na tela de lançamento (UI)
 data class DespesaFeiraUiItem(
-    val itemDespesa: ItemDespesaEntity,
-    val valoresPorDiaInput: MutableMap<String, String>, // Para os TextFields
-    var observacaoInput: String,
-    val isExistingEntry: Boolean // Para saber se já existia um registro no banco
+    val itemDespesa: ItemDespesaEntity = ItemDespesaEntity(), // <<< CORREÇÃO: Adicionado valor padrão
+    val valoresPorDiaInput: MutableMap<String, String> = mutableMapOf(), // <<< CORREÇÃO: Adicionado valor padrão
+    var observacaoInput: String = "",
+    val isExistingEntry: Boolean = false
 )
 
 // Classe de dados para agrupar as informações para gerar o PDF mensal consolidado
 data class DadosPdfDespesasMensais(
-    val ano: Int,
-    val mes: Int,
-    val feirasDasSemanasDoMes: List<FairDetails>,
-    val despesasDeCadaFeiraDoMes: Map<String, List<DespesaFeiraEntity>>,
-    val todosOsItensDeDespesa: List<ItemDespesaEntity>
+    val ano: Int = 0,
+    val mes: Int = 0,
+    val feirasDasSemanasDoMes: List<FairDetails> = emptyList(),
+    val despesasDeCadaFeiraDoMes: Map<String, List<DespesaFeiraEntity>> = emptyMap(),
+    val todosOsItensDeDespesa: List<ItemDespesaEntity> = emptyList()
 )
 
 // Classe de estado para controlar a UI durante processos assíncronos (como gerar PDF)

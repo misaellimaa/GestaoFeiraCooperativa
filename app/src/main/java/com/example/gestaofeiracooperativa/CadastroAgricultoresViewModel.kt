@@ -56,9 +56,6 @@ class CadastroAgricultoresViewModel(private val repository: AgricultorRepository
         repository.delete(agricultor)
     }
 
-    fun deleteAllAgricultores() = viewModelScope.launch {
-        repository.deleteAllAgricultores()
-    }
 }
 
 class CadastroAgricultoresViewModelFactory(private val repository: AgricultorRepository) : ViewModelProvider.Factory {

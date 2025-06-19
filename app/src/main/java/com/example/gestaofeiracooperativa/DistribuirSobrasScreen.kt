@@ -14,103 +14,58 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import kotlinx.coroutines.launch
 
+// Seus imports...
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DistribuirSobrasScreen(
     navController: NavHostController,
-    feiraIdAtual: String, // O ID da feira de DESTINO
-    onDistribuicaoConcluida: () -> Unit,
-    viewModel: RegistrarSobrasViewModel = viewModel(
-        factory = RegistrarSobrasViewModelFactory(
-            feiraIdAtual = feiraIdAtual,
-            feiraRepository = (LocalContext.current.applicationContext as MyApplication).feiraRepository,
-            produtoRepository = (LocalContext.current.applicationContext as MyApplication).produtoRepository,
-            perdaRepository = (LocalContext.current.applicationContext as MyApplication).perdaRepository,
-            entradaRepository = (LocalContext.current.applicationContext as MyApplication).entradaRepository
-        )
-    )
+    feiraIdAtual: String,
+    viewModel: RegistrarSobrasViewModel,
+    entradasAtuaisDaFeira: Map<String, List<EntradaItemAgricultor>>, // Recebe as entradas atuais
+    onDistribuicaoConcluida: (Map<String, List<EntradaItemAgricultor>>) -> Unit // Retorna o novo mapa de entradas
 ) {
     val context = LocalContext.current
-    val uiState by viewModel.uiState.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
     val feiraAnteriorId by viewModel.feiraAnteriorId.collectAsState()
     val sobraUiItems by viewModel.sobraUiItems.collectAsState()
 
-    // Lista local mutável para os TextFields da UI
-    var listaEditavelSobras by remember(sobraUiItems) {
-        mutableStateOf(sobraUiItems.map { it.copy() })
-    }
+    val listaEditavelSobras = remember { mutableStateListOf<SobraUiItem>() }
+    var isLoading by remember { mutableStateOf(false) }
 
-    // Lida com o resultado da distribuição (sucesso/erro)
-    LaunchedEffect(uiState) {
-        when (val state = uiState) {
-            is UiState.Success -> {
-                Toast.makeText(context, "Sobras distribuídas com sucesso!", Toast.LENGTH_SHORT).show()
-                onDistribuicaoConcluida()
-                navController.popBackStack() // Volta para GerenciarFeiraScreen
-            }
-            is UiState.Error -> {
-                Toast.makeText(context, state.message, Toast.LENGTH_LONG).show()
-                viewModel.resetState()
-            }
-            else -> { /* Idle ou Loading */ }
+    LaunchedEffect(sobraUiItems) {
+        if (listaEditavelSobras.toList() != sobraUiItems) {
+            listaEditavelSobras.clear(); listaEditavelSobras.addAll(sobraUiItems.map { it.copy() })
         }
     }
 
     Scaffold(
-        topBar = {
-            StandardTopAppBar(
-                title = "Distribuir Sobras",
-                canNavigateBack = true,
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
+        topBar = { StandardTopAppBar(title = "Distribuir Sobras", canNavigateBack = true, onNavigateBack = { navController.popBackStack() }) }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(innerPadding).fillMaxSize().padding(16.dp)) {
             if (feiraAnteriorId == null) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Nenhuma feira anterior encontrada para importar sobras.")
-                }
-            } else if (listaEditavelSobras.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Nenhuma perda registrada na feira anterior (Feira Nº $feiraAnteriorId).")
-                }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhuma feira anterior encontrada.") }
+            } else if (sobraUiItems.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhuma perda registrada na feira anterior (Nº $feiraAnteriorId).") }
             } else {
-                Text(
-                    "Registrar sobras reaproveitáveis da Feira Nº $feiraAnteriorId.",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
+                Text("Registrar sobras reaproveitáveis da Feira Nº $feiraAnteriorId para a Feira Nº $feiraIdAtual.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 12.dp))
                 Divider(modifier = Modifier.padding(bottom = 12.dp))
-
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     itemsIndexed(listaEditavelSobras, key = { _, item -> item.produto.numero }) { index, itemSobra ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            elevation = CardDefaults.cardElevation(2.dp)
-                        ) {
+                        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), elevation = CardDefaults.cardElevation(2.dp)) {
                             Column(modifier = Modifier.padding(12.dp)) {
-                                Text(itemSobra.produto.item, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                Text(
-                                    "Perda Total Registrada: ${formatQuantity(itemSobra.perdaTotalCalculada)} ${itemSobra.produto.unidade}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
+                                Text("${itemSobra.produto.item} (#${itemSobra.produto.numero})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text("Perda Total Registrada: ${formatQuantity(itemSobra.perdaTotalCalculada)} ${itemSobra.produto.unidade}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                                 Spacer(modifier = Modifier.height(8.dp))
                                 OutlinedTextField(
                                     value = itemSobra.sobraRealInput,
                                     onValueChange = { novoValor ->
-                                        val valorLimpo = novoValor.filter { char -> char.isDigit() || char == '.' || char == ',' }
+                                        val valorLimpo = novoValor.filter { it.isDigit() || it == '.' || it == ',' }
                                         if (valorLimpo.count { it == '.' || it == ',' } <= 1) {
-                                            val novaLista = listaEditavelSobras.toMutableList()
-                                            novaLista[index] = itemSobra.copy(sobraRealInput = valorLimpo)
-                                            listaEditavelSobras = novaLista
+                                            listaEditavelSobras[index] = itemSobra.copy(sobraRealInput = valorLimpo)
                                         }
                                     },
                                     label = { Text("Sobra Real Aproveitável") },
@@ -121,19 +76,25 @@ fun DistribuirSobrasScreen(
                         }
                     }
                 }
-
                 Spacer(modifier = Modifier.height(16.dp))
-
                 Button(
-                    onClick = { viewModel.distribuirSobras(listaEditavelSobras) },
-                    enabled = uiState !is UiState.Loading,
+                    onClick = {
+                        isLoading = true
+                        coroutineScope.launch {
+                            val novasEntradas = viewModel.calcularDistribuicao(listaEditavelSobras.toList(), entradasAtuaisDaFeira)
+                            onDistribuicaoConcluida(novasEntradas)
+                            Toast.makeText(context, "Distribuição concluída!", Toast.LENGTH_SHORT).show()
+                            isLoading = false
+                            navController.popBackStack()
+                        }
+                    },
+                    enabled = !isLoading,
                     modifier = Modifier.fillMaxWidth().height(50.dp)
                 ) {
-                    if (uiState is UiState.Loading) {
+                    if (isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
-                        Text("Distribuindo...", modifier = Modifier.padding(start=8.dp))
                     } else {
-                        Text("Distribuir Sobras para Feira Nº $feiraIdAtual", fontSize = 16.sp)
+                        Text("Confirmar e Distribuir", fontSize = 16.sp)
                     }
                 }
             }

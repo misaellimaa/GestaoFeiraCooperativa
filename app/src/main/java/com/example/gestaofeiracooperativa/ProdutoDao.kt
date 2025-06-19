@@ -22,9 +22,7 @@ interface ProdutoDao {
     @Query("SELECT * FROM produtos WHERE numero = :numero LIMIT 1")
     suspend fun getProductByNumber(numero: String): Produto?
 
-    // <<< ALTERAÇÃO: Mudar estratégia de conflito para ABORT na inserção individual >>>
-    // Isso fará com que uma tentativa de inserir um 'numero' duplicado lance uma exceção.
-    @Insert(onConflict = OnConflictStrategy.ABORT)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(produto: Produto)
 
     @Update
@@ -39,5 +37,5 @@ interface ProdutoDao {
     suspend fun insertAll(produtos: List<Produto>)
 
     @Query("DELETE FROM produtos")
-    suspend fun deleteAllProducts()
+    suspend fun deleteAll()
 }

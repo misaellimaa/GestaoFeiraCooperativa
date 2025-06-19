@@ -1,6 +1,11 @@
 package com.example.gestaofeiracooperativa // Certifique-se que é o seu package correto
 
+import android.util.Log
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.tasks.await
+
 
 // Importe DespesaFeiraEntity e DespesaFeiraDao
 // (Certifique-se que os paths estão corretos, provavelmente do seu DespesaModels.kt e do arquivo DAO)
@@ -8,45 +13,43 @@ import kotlinx.coroutines.flow.Flow
 // import com.example.gestaofeiracooperativa.DespesaFeiraDao
 
 class DespesaFeiraRepository(private val despesaFeiraDao: DespesaFeiraDao) {
+    private val feirasCollection = Firebase.firestore.collection("feiras")
 
-    /**
-     * Busca todos os lançamentos de despesa para uma feira específica.
-     * Retorna um Flow para observação pela UI.
-     */
     fun getDespesasByFeiraId(feiraId: String): Flow<List<DespesaFeiraEntity>> {
         return despesaFeiraDao.getDespesasByFeiraId(feiraId)
     }
 
-    /**
-     * Busca um lançamento de despesa específico para um item de despesa dentro de uma feira.
-     */
-    suspend fun getDespesaByFeiraAndItemDespesaId(feiraId: String, itemDespesaId: Long): DespesaFeiraEntity? {
-        return despesaFeiraDao.getDespesaByFeiraAndItemDespesaId(feiraId, itemDespesaId)
+    // <<< FUNÇÃO ATUALIZADA para retornar Boolean não-nulável >>>
+    suspend fun insertOrUpdateDespesa(despesa: DespesaFeiraEntity): Boolean {
+        return try {
+            val despesaDocRef = feirasCollection
+                .document(despesa.feiraId)
+                .collection("despesas")
+                .document(despesa.itemDespesaId.toString())
+
+            despesaDocRef.set(despesa).await()
+            despesaFeiraDao.insertOrUpdate(despesa)
+            true // Sucesso
+        } catch (e: Exception) {
+            Log.e("DespesaFeiraRepo", "Erro ao salvar despesa no Firestore", e)
+            false // Falha
+        }
     }
 
-    /**
-     * Insere ou atualiza um lançamento de despesa para uma feira.
-     * O DAO usa OnConflictStrategy.REPLACE.
-     */
-    suspend fun insertOrUpdateDespesa(despesa: DespesaFeiraEntity) {
-        despesaFeiraDao.insertOrUpdate(despesa)
+    // <<< FUNÇÃO ATUALIZADA para retornar Boolean não-nulável >>>
+    suspend fun deleteDespesaByFeiraAndItem(feiraId: String, itemDespesaId: Long): Boolean {
+        return try {
+            feirasCollection.document(feiraId).collection("despesas")
+                .document(itemDespesaId.toString()).delete().await()
+
+            despesaFeiraDao.deleteByFeiraAndItemDespesaId(feiraId, itemDespesaId)
+            true // Sucesso
+        } catch (e: Exception) {
+            Log.e("DespesaFeiraRepo", "Erro ao deletar despesa do Firestore", e)
+            false // Falha
+        }
     }
 
-    /**
-     * Deleta um lançamento de despesa específico.
-     */
-    suspend fun deleteDespesa(despesa: DespesaFeiraEntity) {
-        despesaFeiraDao.delete(despesa)
-    }
 
-    /**
-     * Deleta todos os lançamentos de despesa para uma feira específica.
-     */
-    suspend fun deleteDespesasByFeiraId(feiraId: String) {
-        despesaFeiraDao.deleteDespesasByFeiraId(feiraId)
-    }
 
-    suspend fun deleteDespesaByFeiraAndItem(feiraId: String, itemDespesaId: Long) {
-        despesaFeiraDao.deleteByFeiraAndItemDespesaId(feiraId, itemDespesaId)
-    }
 }

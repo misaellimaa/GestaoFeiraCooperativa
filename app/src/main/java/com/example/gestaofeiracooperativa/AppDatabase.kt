@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
         ItemDespesaEntity::class,     // <<< NOVA ENTIDADE ADICIONADA
         DespesaFeiraEntity::class
     ],
-    version = 6, // <<< VERSÃO INCREMENTADA (era 1)
+    version = 7, // <<< VERSÃO INCREMENTADA (era 1)
     exportSchema = false
 )
 @TypeConverters(

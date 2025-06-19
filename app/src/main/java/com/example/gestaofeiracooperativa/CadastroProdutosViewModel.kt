@@ -1,5 +1,6 @@
 package com.example.gestaofeiracooperativa // <<--- MUDE PARA O SEU PACKAGE REAL
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -9,11 +10,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.firstOrNull
 
 class CadastroProdutosViewModel(private val repository: ProdutoRepository) : ViewModel() {
 
@@ -48,19 +47,25 @@ class CadastroProdutosViewModel(private val repository: ProdutoRepository) : Vie
     }
 
     fun insert(produto: Produto) = viewModelScope.launch {
-        repository.insert(produto)
+        val sucesso = repository.insert(produto)
+        if (!sucesso) {
+            Log.e("CadastroProdutosVM", "Falha ao inserir o produto ${produto.numero} no Firestore.")
+            // Aqui você poderia emitir um evento para a UI mostrar um Toast de erro.
+        }
     }
 
     fun update(produto: Produto) = viewModelScope.launch {
-        repository.update(produto)
+        val sucesso = repository.update(produto)
+        if (!sucesso) {
+            Log.e("CadastroProdutosVM", "Falha ao atualizar o produto ${produto.numero} no Firestore.")
+        }
     }
 
     fun delete(produto: Produto) = viewModelScope.launch {
-        repository.delete(produto)
-    }
-
-    fun deleteAllProducts() = viewModelScope.launch {
-        repository.deleteAllProducts()
+        val sucesso = repository.delete(produto)
+        if (!sucesso) {
+            Log.e("CadastroProdutosVM", "Falha ao deletar o produto ${produto.numero} no Firestore.")
+        }
     }
 }
 

@@ -25,7 +25,7 @@ interface AgricultorDao {
 
     // <<< ALTERAÇÃO: Mudar estratégia para ABORT para insert individual >>>
     // Isso fará com que uma tentativa de inserir um 'id' duplicado lance uma SQLiteConstraintException.
-    @Insert(onConflict = OnConflictStrategy.ABORT)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(agricultor: Agricultor)
 
     @Update
@@ -40,5 +40,5 @@ interface AgricultorDao {
     suspend fun insertAll(agricultores: List<Agricultor>) // Usado no AppDatabaseCallback
 
     @Query("DELETE FROM agricultores")
-    suspend fun deleteAllAgricultores()
+    suspend fun deleteAll()
 }
