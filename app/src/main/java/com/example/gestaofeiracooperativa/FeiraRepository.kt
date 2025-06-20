@@ -33,7 +33,6 @@ class FeiraRepository(
     private val jsonFormat = Json { ignoreUnknownKeys = true; isLenient = true }
 
     init {
-        // CORREÇÃO: A chamada para a suspend function agora está dentro de uma coroutine
         CoroutineScope(Dispatchers.IO).launch {
             ouvirAtualizacoesDeFeiras()
         }
@@ -64,7 +63,8 @@ class FeiraRepository(
         catch (e: Exception) { Log.e("FeiraRepository", "Erro ao verificar se feira existe no Firestore", e); false }
     }
 
-    private suspend fun sincronizarFeiraCompleta(feiraId: String) {
+    // <<< FUNÇÃO AGORA É PÚBLICA E FOI RENOMEADA PARA MAIOR CLAREZA >>>
+    suspend fun sincronizarFeiraDoFirestoreParaRoom(feiraId: String) {
         try {
             val feiraRef = feirasCollection.document(feiraId)
             val feiraDoc = feiraRef.get().await()
@@ -75,14 +75,15 @@ class FeiraRepository(
                 val perdas = feiraRef.collection("perdas").get().await().toObjects(PerdaEntity::class.java)
                 val despesas = feiraRef.collection("despesas").get().await().toObjects(DespesaFeiraEntity::class.java)
                 sincronizarFeiraLocal(feiraEntity, entradas, perdas, despesas)
+                Log.d("FeiraRepo_Sync", "Sincronização explícita da feira $feiraId concluída.")
             } else {
                 appDatabase.withTransaction { feiraDao.deleteFeiraById(feiraId) }
             }
-        } catch (e: Exception) { Log.e("FeiraRepo_Sync", "Erro ao sincronizar feira $feiraId.", e) }
+        } catch (e: Exception) { Log.e("FeiraRepo_Sync", "Erro na sincronização explícita da feira $feiraId.", e) }
     }
 
     suspend fun carregarDadosCompletosFeira(feiraId: String): DadosCompletosFeira? {
-        sincronizarFeiraCompleta(feiraId)
+        sincronizarFeiraDoFirestoreParaRoom(feiraId)
         val feiraEntity = feiraDao.getFeiraById(feiraId) ?: return null
         val entradasDoBanco = entradaDao.getEntradasForFeira(feiraId).firstOrNull() ?: emptyList()
         val perdasDoBanco = perdaDao.getPerdasForFeira(feiraId).firstOrNull() ?: emptyList()
@@ -161,7 +162,6 @@ class FeiraRepository(
 
             batch.set(feiraRef, feiraEntity)
             limparSubcolecao(feiraRef.collection("entradas"), batch); entradasEntities.forEach {
-                Log.d("FeiraRepo_Save_Debug", "Adicionando ao batch: /entradas/ para Agr: ${it.agricultorId}, Prod: ${it.produtoNumero}")
                 batch.set(feiraRef.collection("entradas").document("${it.agricultorId}-${it.produtoNumero}"), it)
             }
             limparSubcolecao(feiraRef.collection("perdas"), batch); perdasEntities.forEach { batch.set(feiraRef.collection("perdas").document(it.produtoNumero), it) }
@@ -216,7 +216,5 @@ class FeiraRepository(
             Log.e("FeiraRepository_Cloud", "Erro ao deletar feira do Firestore", e)
             false
         }
-
     }
-
 }

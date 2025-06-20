@@ -24,32 +24,28 @@ fun DistribuirSobrasScreen(
     feiraIdAtual: String,
     viewModel: RegistrarSobrasViewModel,
     entradasAtuaisDaFeira: Map<String, List<EntradaItemAgricultor>>,
+    isSaving: Boolean, // <<< PARÂMETRO CORRETO
     onDistribuicaoConcluida: (Map<String, List<EntradaItemAgricultor>>) -> Unit
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
+    val coroutineScope = rememberCoroutineScope() // <<< O COROUTINE SCOPE CORRETO
     val feiraAnteriorId by viewModel.feiraAnteriorId.collectAsState()
     val sobraUiItems by viewModel.sobraUiItems.collectAsState()
 
     val listaEditavelSobras = remember { mutableStateListOf<SobraUiItem>() }
     var isLoading by remember { mutableStateOf(true) }
-    var isSaving by remember { mutableStateOf(false) }
 
     LaunchedEffect(sobraUiItems, feiraAnteriorId) {
         if (listaEditavelSobras.toList() != sobraUiItems) {
             listaEditavelSobras.clear(); listaEditavelSobras.addAll(sobraUiItems.map { it.copy() })
         }
-        isLoading = false // Para de carregar quando os dados chegam
+        isLoading = false
     }
 
-    Scaffold(
-        topBar = { StandardTopAppBar(title = "Distribuir Sobras", canNavigateBack = true, onNavigateBack = { navController.popBackStack() }) }
-    ) { innerPadding ->
+    Scaffold(topBar = { StandardTopAppBar(title = "Distribuir Sobras", canNavigateBack = true, onNavigateBack = { navController.popBackStack() }) }) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize().padding(16.dp)) {
             if (isLoading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             } else if (feiraAnteriorId == null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhuma feira anterior encontrada para buscar sobras.") }
             } else if (sobraUiItems.isEmpty()) {
@@ -83,14 +79,10 @@ fun DistribuirSobrasScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = {
-                        isSaving = true
+                        // <<< CORREÇÃO PRINCIPAL AQUI >>>
                         coroutineScope.launch {
-                            try {
-                                val novasEntradas = viewModel.calcularDistribuicao(listaEditavelSobras.toList(), entradasAtuaisDaFeira)
-                                onDistribuicaoConcluida(novasEntradas)
-                            } finally {
-                                isSaving = false
-                            }
+                            val novasEntradas = viewModel.calcularDistribuicao(listaEditavelSobras.toList(), entradasAtuaisDaFeira)
+                            onDistribuicaoConcluida(novasEntradas)
                         }
                     },
                     enabled = !isSaving,

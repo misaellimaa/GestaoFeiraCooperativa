@@ -195,7 +195,7 @@ fun LancamentoDespesasFeiraScreen(
                 },
                 modifier = Modifier.fillMaxWidth().height(50.dp).padding(bottom = 8.dp)
             ) {
-                Text("Voltar", fontSize = 16.sp)
+                Text("Finalizar", fontSize = 16.sp)
             }
         }
     }

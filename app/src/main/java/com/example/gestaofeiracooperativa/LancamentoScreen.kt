@@ -28,6 +28,7 @@ fun LancamentoScreen(
     nomeAgricultor: String,
     catalogoProdutos: List<Produto>,
     entradasIniciais: List<EntradaItemAgricultor>,
+    isSaving: Boolean,
     onFinalizar: (List<EntradaItemAgricultor>) -> Unit,
     onVoltar: () -> Unit
 ) {
@@ -271,9 +272,13 @@ fun LancamentoScreen(
                 Button(
                     onClick = { onFinalizar(entradasAgricultor.toList()) },
                     modifier = Modifier.fillMaxWidth().height(50.dp).padding(top=16.dp),
-                    enabled = true
+                    enabled = !isSaving
                 ) {
-                    Text("Finalizar e Salvar Entradas", fontSize = 16.sp)
+                    if (isSaving) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                    } else {
+                        Text("Finalizar e Salvar Entradas", fontSize = 16.sp)
+                    }
                 }
             }
         }

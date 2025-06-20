@@ -28,6 +28,7 @@ fun PerdasTotaisScreen(
     feiraId: String,
     catalogoProdutos: List<Produto>,
     perdasIniciais: List<PerdaItemFeira>,
+    isSaving: Boolean,
     onFinalizarPerdas: (List<PerdaItemFeira>) -> Unit,
     onVoltar: () -> Unit
 ) {
@@ -226,9 +227,13 @@ fun PerdasTotaisScreen(
             Button(
                 onClick = { onFinalizarPerdas(perdasRegistradas.toList()) },
                 modifier = Modifier.fillMaxWidth().height(50.dp).padding(top = 16.dp),
-                enabled = true
+                enabled = !isSaving
             ) {
-                Text("Finalizar Lançamento de Perdas", fontSize = 16.sp)
+                if (isSaving) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                } else {
+                    Text("Finalizar Lançamento de Perdas", fontSize = 16.sp)
+                }
             }
         }
     }
