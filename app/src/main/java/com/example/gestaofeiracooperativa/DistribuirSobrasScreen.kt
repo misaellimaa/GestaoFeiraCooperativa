@@ -17,16 +17,14 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.launch
 
-// Seus imports...
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DistribuirSobrasScreen(
     navController: NavHostController,
     feiraIdAtual: String,
     viewModel: RegistrarSobrasViewModel,
-    entradasAtuaisDaFeira: Map<String, List<EntradaItemAgricultor>>, // Recebe as entradas atuais
-    onDistribuicaoConcluida: (Map<String, List<EntradaItemAgricultor>>) -> Unit // Retorna o novo mapa de entradas
+    entradasAtuaisDaFeira: Map<String, List<EntradaItemAgricultor>>,
+    onDistribuicaoConcluida: (Map<String, List<EntradaItemAgricultor>>) -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -34,24 +32,30 @@ fun DistribuirSobrasScreen(
     val sobraUiItems by viewModel.sobraUiItems.collectAsState()
 
     val listaEditavelSobras = remember { mutableStateListOf<SobraUiItem>() }
-    var isLoading by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(true) }
+    var isSaving by remember { mutableStateOf(false) }
 
-    LaunchedEffect(sobraUiItems) {
+    LaunchedEffect(sobraUiItems, feiraAnteriorId) {
         if (listaEditavelSobras.toList() != sobraUiItems) {
             listaEditavelSobras.clear(); listaEditavelSobras.addAll(sobraUiItems.map { it.copy() })
         }
+        isLoading = false // Para de carregar quando os dados chegam
     }
 
     Scaffold(
         topBar = { StandardTopAppBar(title = "Distribuir Sobras", canNavigateBack = true, onNavigateBack = { navController.popBackStack() }) }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize().padding(16.dp)) {
-            if (feiraAnteriorId == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhuma feira anterior encontrada.") }
+            if (isLoading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else if (feiraAnteriorId == null) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhuma feira anterior encontrada para buscar sobras.") }
             } else if (sobraUiItems.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhuma perda registrada na feira anterior (Nº $feiraAnteriorId).") }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhuma perda registrada na feira anterior (Nº $feiraAnteriorId). Não há sobras para distribuir.") }
             } else {
-                Text("Registrar sobras reaproveitáveis da Feira Nº $feiraAnteriorId para a Feira Nº $feiraIdAtual.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 12.dp))
+                Text("Registre as sobras reaproveitáveis da Feira Nº $feiraAnteriorId para distribuir na Feira Nº $feiraIdAtual.", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 12.dp))
                 Divider(modifier = Modifier.padding(bottom = 12.dp))
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     itemsIndexed(listaEditavelSobras, key = { _, item -> item.produto.numero }) { index, itemSobra ->
@@ -79,22 +83,23 @@ fun DistribuirSobrasScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = {
-                        isLoading = true
+                        isSaving = true
                         coroutineScope.launch {
-                            val novasEntradas = viewModel.calcularDistribuicao(listaEditavelSobras.toList(), entradasAtuaisDaFeira)
-                            onDistribuicaoConcluida(novasEntradas)
-                            Toast.makeText(context, "Distribuição concluída!", Toast.LENGTH_SHORT).show()
-                            isLoading = false
-                            navController.popBackStack()
+                            try {
+                                val novasEntradas = viewModel.calcularDistribuicao(listaEditavelSobras.toList(), entradasAtuaisDaFeira)
+                                onDistribuicaoConcluida(novasEntradas)
+                            } finally {
+                                isSaving = false
+                            }
                         }
                     },
-                    enabled = !isLoading,
+                    enabled = !isSaving,
                     modifier = Modifier.fillMaxWidth().height(50.dp)
                 ) {
-                    if (isLoading) {
+                    if (isSaving) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
                     } else {
-                        Text("Confirmar e Distribuir", fontSize = 16.sp)
+                        Text("Confirmar e Distribuir Sobras", fontSize = 16.sp)
                     }
                 }
             }

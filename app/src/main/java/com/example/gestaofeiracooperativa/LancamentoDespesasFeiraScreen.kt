@@ -34,16 +34,29 @@ import kotlinx.coroutines.launch
 fun LancamentoDespesasFeiraScreen(
     navController: NavHostController,
     fairDetails: FairDetails,
-    viewModel: LancamentoDespesasFeiraViewModel,
-    onDespesasSalvas: (List<DespesaFeiraUiItem>) -> Unit
+    viewModel: LancamentoDespesasFeiraViewModel
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     val listaDespesasUiOriginal by viewModel.listaDespesasUi.collectAsState()
-
-    // <<< Usando mutableStateListOf para garantir que a UI reaja a mudanças nos itens >>>
     val listaEditavelDespesas = remember { mutableStateListOf<DespesaFeiraUiItem>() }
+    val operationStatus by viewModel.operationStatus.collectAsState()
+
+    // Efeito para mostrar Toasts de feedback que vêm do ViewModel
+    LaunchedEffect(operationStatus) {
+        when (val status = operationStatus) {
+            is UiState.Success -> {
+                // Toast.makeText(context, status.data, Toast.LENGTH_SHORT).show()
+                viewModel.resetOperationStatus()
+            }
+            is UiState.Error -> {
+                Toast.makeText(context, status.message, Toast.LENGTH_LONG).show()
+                viewModel.resetOperationStatus()
+            }
+            else -> { /* Não faz nada para Idle ou Loading */ }
+        }
+    }
 
     // Sincroniza a lista local com a do ViewModel quando ela é carregada
     LaunchedEffect(listaDespesasUiOriginal) {
@@ -111,6 +124,14 @@ fun LancamentoDespesasFeiraScreen(
                     }
                 } else {
                     itemsIndexed(listaEditavelDespesas, key = { _, item -> item.itemDespesa.id }) { index, despesaItemUi ->
+
+                        LaunchedEffect(despesaItemUi) {
+                            kotlinx.coroutines.delay(1500L) // Debounce
+                            if (index < listaEditavelDespesas.size && listaEditavelDespesas[index] == despesaItemUi) {
+                                viewModel.salvarDespesa(despesaItemUi)
+                            }
+                        }
+
                         Card(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                             elevation = CardDefaults.cardElevation(2.dp)
@@ -137,7 +158,6 @@ fun LancamentoDespesasFeiraScreen(
                                             onValueChange = { novoValor ->
                                                 val valorLimpo = novoValor.filter { it.isDigit() || it == '.' || it == ',' }
                                                 if (valorLimpo.count { it == '.' || it == ',' } <= 1) {
-                                                    // <<< CORREÇÃO: Atualiza o item na lista para forçar a recomposição >>>
                                                     val itemAntigo = listaEditavelDespesas[index]
                                                     val novoMapa = itemAntigo.valoresPorDiaInput.toMutableMap().apply { this[dia] = valorLimpo }
                                                     listaEditavelDespesas[index] = itemAntigo.copy(valoresPorDiaInput = novoMapa)
@@ -155,7 +175,6 @@ fun LancamentoDespesasFeiraScreen(
                                 OutlinedTextField(
                                     value = despesaItemUi.observacaoInput,
                                     onValueChange = { novoValor ->
-                                        // <<< CORREÇÃO: Atualiza o item na lista para forçar a recomposição >>>
                                         listaEditavelDespesas[index] = despesaItemUi.copy(observacaoInput = novoValor)
                                     },
                                     label = { Text("Observação (Opcional)") },
@@ -172,13 +191,11 @@ fun LancamentoDespesasFeiraScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Button(
                 onClick = {
-                    onDespesasSalvas(listaEditavelDespesas.toList())
                     navController.popBackStack()
                 },
-                modifier = Modifier.fillMaxWidth().height(50.dp).padding(bottom = 8.dp),
-                enabled = true // Botão sempre habilitado para salvar o estado atual
+                modifier = Modifier.fillMaxWidth().height(50.dp).padding(bottom = 8.dp)
             ) {
-                Text("Concluir e Salvar Alterações", fontSize = 16.sp)
+                Text("Voltar", fontSize = 16.sp)
             }
         }
     }

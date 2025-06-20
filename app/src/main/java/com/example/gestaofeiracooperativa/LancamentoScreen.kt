@@ -104,7 +104,7 @@ fun LancamentoScreen(
             onDismissRequest = { showConfirmDeleteDialog = false; itemIndexToDelete = null },
             icon = { Icon(Icons.Default.Warning, contentDescription = "Aviso")},
             title = { Text("Confirmar Remoção") },
-            text = { Text("Tem certeza que deseja remover a entrada para '${entradasAgricultor.getOrNull(itemIndexToDelete ?: -1)?.produto?.item}'?") },
+            text = { Text("Tem certeza que deseja remover a entrada for '${entradasAgricultor.getOrNull(itemIndexToDelete ?: -1)?.produto?.item}'?") },
             confirmButton = { TextButton(onClick = { itemIndexToDelete?.let { if (it in entradasAgricultor.indices) entradasAgricultor.removeAt(it) }; showConfirmDeleteDialog = false; itemIndexToDelete = null }) { Text("Remover") } },
             dismissButton = { TextButton(onClick = { showConfirmDeleteDialog = false; itemIndexToDelete = null }) { Text("Cancelar") } }
         )
@@ -273,7 +273,7 @@ fun LancamentoScreen(
                     modifier = Modifier.fillMaxWidth().height(50.dp).padding(top=16.dp),
                     enabled = true
                 ) {
-                    Text("Finalizar Entradas do Agricultor", fontSize = 16.sp)
+                    Text("Finalizar e Salvar Entradas", fontSize = 16.sp)
                 }
             }
         }

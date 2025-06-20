@@ -195,7 +195,21 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                             novaFeiraIdParaCriar = feiraId
                             showDialogFeiraJaExiste = true
                         } else {
-                            navController.navigate(AppRoutes.gerenciarFeiraRoute(feiraId, startDate, endDate))
+                            val novaFeira = DadosCompletosFeira(
+                                fairDetails = FairDetails(
+                                    feiraId = feiraId,
+                                    startDate = startDate,
+                                    endDate = endDate
+                                )
+                            )
+                            val salvouComSucesso = feiraRepository.salvarDadosCompletosFeira(novaFeira)
+
+                            if (salvouComSucesso) {
+                                Toast.makeText(context, "Feira Nº $feiraId criada e salva com sucesso!", Toast.LENGTH_SHORT).show()
+                                navController.navigate(AppRoutes.gerenciarFeiraRoute(feiraId))
+                            } else {
+                                Toast.makeText(context, "Erro ao criar a nova feira.", Toast.LENGTH_LONG).show()
+                            }
                         }
                     }
                 }
@@ -262,17 +276,34 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
         ) { backStackEntry ->
             val feiraIdArg = backStackEntry.arguments?.getString("feiraId")!!
             val agricultorIdArg = backStackEntry.arguments?.getString("agricultorId")!!
-            val currentFeira = feiraEmProcessamento
-            if (currentFeira != null && currentFeira.fairDetails.feiraId == feiraIdArg) {
+
+            val feiraAtual = feiraEmProcessamento
+
+            if (feiraAtual != null && feiraAtual.fairDetails.feiraId == feiraIdArg) {
                 LancamentoScreen(
                     nomeAgricultor = todosOsAgricultoresState.find { it.id == agricultorIdArg }?.nome ?: "ID: $agricultorIdArg",
                     catalogoProdutos = todosOsProdutosState,
-                    entradasIniciais = currentFeira.entradasTodosAgricultores[agricultorIdArg] ?: emptyList(),
+                    entradasIniciais = feiraAtual.entradasTodosAgricultores[agricultorIdArg] ?: emptyList(),
                     onFinalizar = { novasEntradas ->
-                        feiraEmProcessamento = currentFeira.copy(
-                            entradasTodosAgricultores = currentFeira.entradasTodosAgricultores.toMutableMap().apply { put(agricultorIdArg, novasEntradas) }
+                        val feiraParaAtualizar = feiraEmProcessamento ?: return@LancamentoScreen
+
+                        val mapaDeEntradasAtualizado = feiraParaAtualizar.entradasTodosAgricultores.toMutableMap()
+                        mapaDeEntradasAtualizado[agricultorIdArg] = novasEntradas
+
+                        val feiraAtualizada = feiraParaAtualizar.copy(
+                            entradasTodosAgricultores = mapaDeEntradasAtualizado
                         )
-                        Toast.makeText(context, "Entradas atualizadas em memória. Salve a feira para persistir.", Toast.LENGTH_SHORT).show()
+
+                        feiraEmProcessamento = feiraAtualizada
+
+                        scope.launch {
+                            if (feiraRepository.salvarDadosCompletosFeira(feiraAtualizada)) {
+                                isCurrentFeiraPersisted = true
+                                Toast.makeText(context, "Entradas salvas e feira atualizada!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Erro ao salvar entradas.", Toast.LENGTH_LONG).show()
+                            }
+                        }
                         navController.popBackStack()
                     },
                     onVoltar = { navController.popBackStack() }
@@ -292,8 +323,22 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     catalogoProdutos = todosOsProdutosState,
                     perdasIniciais = currentFeira.perdasTotaisDaFeira.toList(),
                     onFinalizarPerdas = { novasPerdas ->
-                        feiraEmProcessamento = currentFeira.copy(perdasTotaisDaFeira = novasPerdas)
-                        Toast.makeText(context, "Perdas atualizadas em memória. Salve a feira para persistir.", Toast.LENGTH_SHORT).show()
+                        val feiraParaAtualizar = feiraEmProcessamento ?: return@PerdasTotaisScreen
+
+                        val feiraAtualizada = feiraParaAtualizar.copy(
+                            perdasTotaisDaFeira = novasPerdas
+                        )
+
+                        feiraEmProcessamento = feiraAtualizada
+
+                        scope.launch {
+                            if (feiraRepository.salvarDadosCompletosFeira(feiraAtualizada)) {
+                                isCurrentFeiraPersisted = true
+                                Toast.makeText(context, "Perdas salvas e feira atualizada!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Erro ao salvar perdas.", Toast.LENGTH_LONG).show()
+                            }
+                        }
                         navController.popBackStack()
                     },
                     onVoltar = { navController.popBackStack() }
@@ -311,11 +356,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                 LancamentoDespesasFeiraScreen(
                     navController = navController,
                     fairDetails = fairDetailsDaFeiraAtual,
-                    viewModel = viewModel(factory = LancamentoDespesasFeiraViewModelFactory(itemDespesaRepository, despesaFeiraRepository, feiraIdArgumento)),
-                    onDespesasSalvas = { despesasAtualizadas ->
-                        feiraEmProcessamento = feiraEmProcessamento?.copy(despesasDaFeira = despesasAtualizadas)
-                        Toast.makeText(context, "Despesas atualizadas em memória. Salve a feira para persistir.", Toast.LENGTH_SHORT).show()
-                    }
+                    viewModel = viewModel(factory = LancamentoDespesasFeiraViewModelFactory(itemDespesaRepository, despesaFeiraRepository, feiraIdArgumento))
                 )
             } else { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Carregando...") } }
         }
@@ -332,11 +373,26 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                     viewModel = viewModel(factory = RegistrarSobrasViewModelFactory(feiraIdAtual = feiraIdDestino, feiraRepository = feiraRepository, produtoRepository = produtoRepository, perdaRepository = perdaRepository, entradaRepository = entradaRepository)),
                     entradasAtuaisDaFeira = feiraEmProcessamento!!.entradasTodosAgricultores,
                     onDistribuicaoConcluida = { novasEntradas ->
-                        feiraEmProcessamento = feiraEmProcessamento?.copy(entradasTodosAgricultores = novasEntradas)
-                        Toast.makeText(context, "Distribuição de sobras atualizada em memória. Salve a feira para persistir.", Toast.LENGTH_LONG).show()
+                        val feiraParaAtualizar = feiraEmProcessamento ?: return@DistribuirSobrasScreen
+
+                        val feiraAtualizada = feiraParaAtualizar.copy(
+                            entradasTodosAgricultores = novasEntradas
+                        )
+
+                        feiraEmProcessamento = feiraAtualizada
+
+                        scope.launch {
+                            if (feiraRepository.salvarDadosCompletosFeira(feiraAtualizada)) {
+                                isCurrentFeiraPersisted = true
+                                Toast.makeText(context, "Sobras distribuídas e feira salva!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Erro ao salvar distribuição de sobras.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                        navController.popBackStack()
                     }
                 )
-            } else { Text("Erro: Não foi possível carregar dados para distribuição.") }
+            } else { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {Text("Erro: Não foi possível carregar dados para distribuição.")} }
         }
 
         composable(AppRoutes.CADASTRO_PRODUTOS) { CadastroProdutosScreen(navController = navController) }
