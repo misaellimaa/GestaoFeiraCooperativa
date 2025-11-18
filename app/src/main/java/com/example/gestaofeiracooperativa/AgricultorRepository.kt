@@ -15,10 +15,6 @@ class AgricultorRepository(private val agricultorDao: AgricultorDao) {
     private val firestore = Firebase.firestore
     private val agricultoresCollection = firestore.collection("agricultores")
 
-    init {
-        ouvirAtualizacoesDeAgricultores()
-    }
-
     // --- LEITURA: Continua lendo do cache local (Room) ---
     fun getAllAgricultores(): Flow<List<Agricultor>> = agricultorDao.getAllAgricultores()
 
@@ -54,21 +50,25 @@ class AgricultorRepository(private val agricultorDao: AgricultorDao) {
 
     // --- LÓGICA DE SINCRONIZAÇÃO ---
 
-    private fun ouvirAtualizacoesDeAgricultores() {
-        agricultoresCollection.addSnapshotListener { snapshots, e ->
-            if (e != null) {
-                Log.w("AgricultorRepository", "Ouvinte do Firestore falhou.", e)
-                return@addSnapshotListener
-            }
-
-            if (snapshots != null) {
+    /**
+     * <<< ALTERAÇÃO 2: NOVA FUNÇÃO PÚBLICA DE SINCROZINAÇÃO (SOB DEMANDA) >>>
+     * Busca os dados do Firestore UMA VEZ e atualiza o Room.
+     * Esta é a função que o MyApplication vai chamar.
+     */
+    suspend fun sincronizarAgricultoresDoFirestore() {
+        Log.d("AgricultorRepository", "Iniciando sincronização de agricultores (uma vez) do Firestore...")
+        try {
+            // Usa GET() para buscar os dados UMA VEZ
+            val snapshots = agricultoresCollection.get().await()
+            if (snapshots != null && !snapshots.isEmpty) {
                 val agricultoresDaNuvem = snapshots.toObjects(Agricultor::class.java)
                 Log.d("AgricultorRepository", "Recebidos ${agricultoresDaNuvem.size} agricultores da nuvem.")
-                // Usa uma coroutine para não bloquear a thread principal
-                CoroutineScope(Dispatchers.IO).launch {
-                    sincronizarBancoLocal(agricultoresDaNuvem)
-                }
+                sincronizarBancoLocal(agricultoresDaNuvem)
+            } else {
+                Log.w("AgricultorRepository", "Nenhum agricultor encontrado no Firestore durante a sincronização.")
             }
+        } catch (e: Exception) {
+            Log.e("AgricultorRepository", "Falha ao sincronizar agricultores do Firestore.", e)
         }
     }
 

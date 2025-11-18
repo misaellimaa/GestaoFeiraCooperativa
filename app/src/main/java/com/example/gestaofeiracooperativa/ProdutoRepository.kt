@@ -17,11 +17,6 @@ class ProdutoRepository(private val produtoDao: ProdutoDao) {
     // Define um nome para a nossa coleção de produtos na nuvem
     private val produtosCollection = firestore.collection("produtos")
 
-    init {
-        // Inicia um ouvinte em tempo real para a coleção de produtos
-        // Isso manterá o banco de dados local (Room) sempre sincronizado com a nuvem
-        ouvirAtualizacoesDeProdutos()
-    }
 
     // --- FUNÇÃO PRINCIPAL DE LEITURA ---
     // A UI observará esta função. Ela lê do banco de dados local (Room),
@@ -75,21 +70,20 @@ class ProdutoRepository(private val produtoDao: ProdutoDao) {
 
     // --- LÓGICA DE SINCRONIZAÇÃO ---
 
-    private fun ouvirAtualizacoesDeProdutos() {
-        produtosCollection.addSnapshotListener { snapshots, e ->
-            if (e != null) {
-                Log.w("ProdutoRepository", "Ouvinte do Firestore falhou.", e)
-                return@addSnapshotListener
-            }
-
-            if (snapshots != null) {
+    suspend fun sincronizarProdutosDoFirestore() {
+        Log.d("ProdutoRepository", "Iniciando sincronização de produtos (uma vez) do Firestore...")
+        try {
+            // Usamos GET() para buscar os dados UMA VEZ, em vez de addSnapshotListener
+            val snapshots = produtosCollection.get().await()
+            if (snapshots != null && !snapshots.isEmpty) {
                 val produtosDaNuvem = snapshots.toObjects(Produto::class.java)
                 Log.d("ProdutoRepository", "Recebidos ${produtosDaNuvem.size} produtos da nuvem. Sincronizando com o banco local.")
-                // Usa uma coroutine para não bloquear a thread principal
-                CoroutineScope(Dispatchers.IO).launch {
-                    sincronizarBancoLocal(produtosDaNuvem)
-                }
+                sincronizarBancoLocal(produtosDaNuvem)
+            } else {
+                Log.w("ProdutoRepository", "Nenhum produto encontrado no Firestore durante a sincronização.")
             }
+        } catch (e: Exception) {
+            Log.e("ProdutoRepository", "Falha ao sincronizar produtos do Firestore.", e)
         }
     }
 

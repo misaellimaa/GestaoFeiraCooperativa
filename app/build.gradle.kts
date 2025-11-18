@@ -16,7 +16,7 @@ android {
         applicationId = "com.example.gestaofeiracooperativa"
         minSdk = 31
         targetSdk = 35
-        versionCode = 1
+        versionCode = 2
         versionName = "1.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

@@ -15,9 +15,6 @@ class ItemDespesaRepository(private val itemDespesaDao: ItemDespesaDao) {
     private val firestore = Firebase.firestore
     private val itensDespesaCollection = firestore.collection("itens_despesa")
 
-    init {
-        ouvirAtualizacoesDeItensDespesa()
-    }
 
     // A UI continua lendo do Room, que agora é um cache em tempo real
     fun getAllItensDespesa(): Flow<List<ItemDespesaEntity>> = itemDespesaDao.getAllItensDespesa()
@@ -73,20 +70,25 @@ class ItemDespesaRepository(private val itemDespesaDao: ItemDespesaDao) {
         }
     }
 
-    // --- Lógica de Sincronização ---
-    private fun ouvirAtualizacoesDeItensDespesa() {
-        itensDespesaCollection.addSnapshotListener { snapshots, e ->
-            if (e != null) {
-                Log.w("ItemDespesaRepo", "Ouvinte do Firestore para itens de despesa falhou.", e)
-                return@addSnapshotListener
-            }
-            if (snapshots != null) {
+    /**
+     * <<< ALTERAÇÃO 2: NOVA FUNÇÃO PÚBLICA DE SINCROZINAÇÃO (SOB DEMANDA) >>>
+     * Busca os dados do Firestore UMA VEZ e atualiza o Room.
+     * Esta é a função que o MyApplication vai chamar.
+     */
+    suspend fun sincronizarItensDespesaDoFirestore() {
+        Log.d("ItemDespesaRepo", "Iniciando sincronização de itens de despesa (uma vez) do Firestore...")
+        try {
+            // Usa GET() para buscar os dados UMA VEZ
+            val snapshots = itensDespesaCollection.get().await()
+            if (snapshots != null && !snapshots.isEmpty) {
                 val itensDaNuvem = snapshots.toObjects(ItemDespesaEntity::class.java)
                 Log.d("ItemDespesaRepo", "Recebidos ${itensDaNuvem.size} itens de despesa da nuvem.")
-                CoroutineScope(Dispatchers.IO).launch {
-                    sincronizarBancoLocal(itensDaNuvem)
-                }
+                sincronizarBancoLocal(itensDaNuvem)
+            } else {
+                Log.w("ItemDespesaRepo", "Nenhum item de despesa encontrado no Firestore durante a sincronização.")
             }
+        } catch (e: Exception) {
+            Log.e("ItemDespesaRepo", "Falha ao sincronizar itens de despesa do Firestore.", e)
         }
     }
 
