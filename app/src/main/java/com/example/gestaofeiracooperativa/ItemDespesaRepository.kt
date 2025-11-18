@@ -3,10 +3,8 @@ package com.example.gestaofeiracooperativa
 import android.util.Log
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.tasks.await
 import java.lang.Exception
 
@@ -15,93 +13,69 @@ class ItemDespesaRepository(private val itemDespesaDao: ItemDespesaDao) {
     private val firestore = Firebase.firestore
     private val itensDespesaCollection = firestore.collection("itens_despesa")
 
-
-    // A UI continua lendo do Room, que agora é um cache em tempo real
     fun getAllItensDespesa(): Flow<List<ItemDespesaEntity>> = itemDespesaDao.getAllItensDespesa()
 
-    // --- Funções de Escrita agora operam primeiro no Room (para obter o ID) e depois no Firestore ---
-
+    // --- ESCRITA SEGURA ---
     suspend fun insertItemDespesa(itemDespesa: ItemDespesaEntity): Boolean {
         return try {
-            // 1. Insere no Room primeiro para obter o ID autogerado
+            // 1. Insere no Room para gerar o ID
             val novoId = itemDespesaDao.insertItemDespesa(itemDespesa)
-
-            // 2. Cria o objeto final com o ID correto para salvar no Firestore
             val itemComId = itemDespesa.copy(id = novoId)
-
-            // 3. Usa o ID gerado pelo Room como ID do documento no Firestore
+            // 2. Envia para a nuvem com o ID correto
             itensDespesaCollection.document(novoId.toString()).set(itemComId).await()
-            Log.d("ItemDespesaRepo", "Item de despesa salvo com sucesso: ID=${novoId}, Nome=${itemComId.nome}")
+            Log.d("ItemDespesaRepo", "Item salvo: ${itemComId.nome}")
             true
         } catch (e: Exception) {
-            Log.e("ItemDespesaRepo", "Erro ao salvar item de despesa: ${itemDespesa.nome}", e)
-            false
+            Log.e("ItemDespesaRepo", "Erro ao salvar item na nuvem.", e)
+            // Como já salvou no Room na linha 1, retornamos true
+            true
         }
     }
 
     suspend fun updateItemDespesa(itemDespesa: ItemDespesaEntity): Boolean {
-        // Para atualizar, o objeto 'itemDespesa' já deve ter o ID correto do Room.
-        if (itemDespesa.id == 0L) {
-            Log.e("ItemDespesaRepo", "Tentativa de atualizar item de despesa sem um ID válido.")
-            return false
-        }
+        if (itemDespesa.id == 0L) return false
         return try {
+            itemDespesaDao.updateItemDespesa(itemDespesa) // Update Local
             itensDespesaCollection.document(itemDespesa.id.toString()).set(itemDespesa).await()
-            Log.d("ItemDespesaRepo", "Item de despesa atualizado com sucesso: ID=${itemDespesa.id}")
             true
         } catch (e: Exception) {
-            Log.e("ItemDespesaRepo", "Erro ao atualizar item de despesa: ID=${itemDespesa.id}", e)
-            false
+            Log.e("ItemDespesaRepo", "Erro update nuvem.", e)
+            true
         }
     }
 
     suspend fun deleteItemDespesa(itemDespesa: ItemDespesaEntity): Boolean {
-        if (itemDespesa.id == 0L) {
-            Log.e("ItemDespesaRepo", "Tentativa de deletar item de despesa sem um ID válido.")
-            return false
-        }
+        if (itemDespesa.id == 0L) return false
         return try {
             itensDespesaCollection.document(itemDespesa.id.toString()).delete().await()
-            Log.d("ItemDespesaRepo", "Item de despesa deletado com sucesso: ID=${itemDespesa.id}")
+            itemDespesaDao.deleteItemDespesa(itemDespesa)
             true
         } catch (e: Exception) {
-            Log.e("ItemDespesaRepo", "Erro ao deletar item de despesa: ID=${itemDespesa.id}", e)
-            false
+            itemDespesaDao.deleteItemDespesa(itemDespesa)
+            Log.e("ItemDespesaRepo", "Erro delete nuvem.", e)
+            true
         }
     }
 
-    /**
-     * <<< ALTERAÇÃO 2: NOVA FUNÇÃO PÚBLICA DE SINCROZINAÇÃO (SOB DEMANDA) >>>
-     * Busca os dados do Firestore UMA VEZ e atualiza o Room.
-     * Esta é a função que o MyApplication vai chamar.
-     */
+    // --- PUSH ---
+    suspend fun sincronizarItensLocaisParaNuvem() {
+        val locais = itemDespesaDao.getAllItensDespesa().firstOrNull() ?: emptyList()
+        locais.forEach { item ->
+            try {
+                itensDespesaCollection.document(item.id.toString()).set(item).await()
+            } catch (e: Exception) { Log.w("ItemRepo", "Erro upload item ${item.id}", e) }
+        }
+    }
+
+    // --- PULL (Merge) ---
     suspend fun sincronizarItensDespesaDoFirestore() {
-        Log.d("ItemDespesaRepo", "Iniciando sincronização de itens de despesa (uma vez) do Firestore...")
         try {
-            // Usa GET() para buscar os dados UMA VEZ
             val snapshots = itensDespesaCollection.get().await()
             if (snapshots != null && !snapshots.isEmpty) {
-                val itensDaNuvem = snapshots.toObjects(ItemDespesaEntity::class.java)
-                Log.d("ItemDespesaRepo", "Recebidos ${itensDaNuvem.size} itens de despesa da nuvem.")
-                sincronizarBancoLocal(itensDaNuvem)
-            } else {
-                Log.w("ItemDespesaRepo", "Nenhum item de despesa encontrado no Firestore durante a sincronização.")
+                val nuvem = snapshots.toObjects(ItemDespesaEntity::class.java)
+                itemDespesaDao.insertAll(nuvem) // Merge seguro
             }
-        } catch (e: Exception) {
-            Log.e("ItemDespesaRepo", "Falha ao sincronizar itens de despesa do Firestore.", e)
-        }
-    }
-
-    private suspend fun sincronizarBancoLocal(itensDaNuvem: List<ItemDespesaEntity>) {
-        try {
-            // A estratégia 'REPLACE' no insertAll cuidará de inserir novos e atualizar existentes.
-            // Deletar tudo primeiro garante que itens removidos na nuvem também sejam removidos localmente.
-            itemDespesaDao.deleteAll()
-            itemDespesaDao.insertAll(itensDaNuvem)
-            Log.d("ItemDespesaRepo", "Banco local de itens de despesa sincronizado.")
-        } catch (e: Exception) {
-            Log.e("ItemDespesaRepo", "Erro ao sincronizar banco de itens de despesa.", e)
-        }
+        } catch (e: Exception) { Log.e("ItemRepo", "Erro download itens.", e) }
     }
 
     fun searchItensDespesa(query: String): Flow<List<ItemDespesaEntity>> = itemDespesaDao.searchItensDespesa(query)

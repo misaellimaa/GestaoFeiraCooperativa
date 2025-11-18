@@ -1,55 +1,60 @@
-package com.example.gestaofeiracooperativa // Certifique-se que é o seu package correto
+package com.example.gestaofeiracooperativa
 
 import android.util.Log
-import com.google.firebase.Firebase
-import com.google.firebase.firestore.firestore
+import com.google.firebase.firestore.ktx.firestore // Use a importação ktx padrão se possível
+import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.tasks.await
-
-
-// Importe DespesaFeiraEntity e DespesaFeiraDao
-// (Certifique-se que os paths estão corretos, provavelmente do seu DespesaModels.kt e do arquivo DAO)
-// import com.example.gestaofeiracooperativa.DespesaFeiraEntity
-// import com.example.gestaofeiracooperativa.DespesaFeiraDao
+import java.lang.Exception
 
 class DespesaFeiraRepository(private val despesaFeiraDao: DespesaFeiraDao) {
+
     private val feirasCollection = Firebase.firestore.collection("feiras")
 
     fun getDespesasByFeiraId(feiraId: String): Flow<List<DespesaFeiraEntity>> {
         return despesaFeiraDao.getDespesasByFeiraId(feiraId)
     }
 
-    // <<< FUNÇÃO ATUALIZADA para retornar Boolean não-nulável >>>
+    // <<< CORREÇÃO: PRIORIDADE LOCAL (Offline Safe) >>>
     suspend fun insertOrUpdateDespesa(despesa: DespesaFeiraEntity): Boolean {
         return try {
+            // 1. Salva LOCALMENTE primeiro (Garante que o dado não se perde)
+            despesaFeiraDao.insertOrUpdate(despesa)
+
+            // 2. Tenta enviar para a NUVEM
             val despesaDocRef = feirasCollection
                 .document(despesa.feiraId)
                 .collection("despesas")
                 .document(despesa.itemDespesaId.toString())
 
             despesaDocRef.set(despesa).await()
-            despesaFeiraDao.insertOrUpdate(despesa)
-            true // Sucesso
+
+            true // Sucesso total
         } catch (e: Exception) {
-            Log.e("DespesaFeiraRepo", "Erro ao salvar despesa no Firestore", e)
-            false // Falha
+            Log.e("DespesaFeiraRepo", "Salvo apenas localmente. Erro na nuvem.", e)
+            // Retorna TRUE porque para o usuário o dado está salvo (no celular)
+            true
         }
     }
 
-    // <<< FUNÇÃO ATUALIZADA para retornar Boolean não-nulável >>>
+    // <<< CORREÇÃO: PRIORIDADE LOCAL (Offline Safe) >>>
     suspend fun deleteDespesaByFeiraAndItem(feiraId: String, itemDespesaId: Long): Boolean {
         return try {
-            feirasCollection.document(feiraId).collection("despesas")
-                .document(itemDespesaId.toString()).delete().await()
-
+            // 1. Deleta LOCALMENTE primeiro (UI atualiza na hora)
             despesaFeiraDao.deleteByFeiraAndItemDespesaId(feiraId, itemDespesaId)
-            true // Sucesso
+
+            // 2. Tenta deletar na NUVEM
+            feirasCollection.document(feiraId)
+                .collection("despesas")
+                .document(itemDespesaId.toString())
+                .delete()
+                .await()
+
+            true // Sucesso total
         } catch (e: Exception) {
-            Log.e("DespesaFeiraRepo", "Erro ao deletar despesa do Firestore", e)
-            false // Falha
+            Log.e("DespesaFeiraRepo", "Deletado apenas localmente. Erro na nuvem.", e)
+            // Retorna TRUE porque a ação foi concluída no celular
+            true
         }
     }
-
-
-
 }

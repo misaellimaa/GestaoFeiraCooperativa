@@ -3,10 +3,8 @@ package com.example.gestaofeiracooperativa
 import android.util.Log
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.tasks.await
 import java.lang.Exception
 
@@ -15,75 +13,67 @@ class AgricultorRepository(private val agricultorDao: AgricultorDao) {
     private val firestore = Firebase.firestore
     private val agricultoresCollection = firestore.collection("agricultores")
 
-    // --- LEITURA: Continua lendo do cache local (Room) ---
     fun getAllAgricultores(): Flow<List<Agricultor>> = agricultorDao.getAllAgricultores()
 
-    // --- ESCRITA: Agora salva/atualiza/deleta na nuvem (Firestore) ---
-
+    // --- ESCRITA SEGURA (Local + Nuvem) ---
     suspend fun insert(agricultor: Agricultor): Boolean {
         return try {
-            // Usa o 'id' do agricultor como ID do documento no Firestore
+            // 1. Salva localmente primeiro (para aparecer na tela na hora)
+            agricultorDao.insert(agricultor)
+            // 2. Tenta salvar na nuvem
             agricultoresCollection.document(agricultor.id).set(agricultor).await()
-            Log.d("AgricultorRepository", "Agricultor salvo no Firestore: ${agricultor.id}")
+            Log.d("AgricultorRepository", "Agricultor salvo: ${agricultor.id}")
             true
         } catch (e: Exception) {
-            Log.e("AgricultorRepository", "Erro ao salvar agricultor no Firestore", e)
-            false
+            Log.e("AgricultorRepository", "Salvo apenas localmente. Erro na nuvem.", e)
+            true // Retorna true pois está salvo no celular (fonte principal)
         }
     }
 
-    suspend fun update(agricultor: Agricultor): Boolean {
-        // A função 'set' do Firestore serve tanto para criar quanto para sobrescrever/atualizar
-        return insert(agricultor)
-    }
+    suspend fun update(agricultor: Agricultor): Boolean = insert(agricultor)
 
     suspend fun delete(agricultor: Agricultor): Boolean {
         return try {
             agricultoresCollection.document(agricultor.id).delete().await()
-            Log.d("AgricultorRepository", "Agricultor deletado do Firestore: ${agricultor.id}")
+            agricultorDao.delete(agricultor)
             true
         } catch (e: Exception) {
-            Log.e("AgricultorRepository", "Erro ao deletar agricultor do Firestore", e)
-            false
+            // Se falhar na nuvem, deleta localmente pelo menos
+            agricultorDao.delete(agricultor)
+            Log.e("AgricultorRepository", "Deletado localmente. Erro na nuvem.", e)
+            true
         }
     }
 
-    // --- LÓGICA DE SINCRONIZAÇÃO ---
+    // --- PUSH: Envia dados locais para a nuvem ---
+    suspend fun sincronizarAgricultoresLocaisParaNuvem() {
+        Log.d("AgricultorRepo", "Enviando agricultores locais para a nuvem...")
+        val locais = agricultorDao.getAllAgricultores().firstOrNull() ?: emptyList()
+        locais.forEach { agricultor ->
+            try {
+                agricultoresCollection.document(agricultor.id).set(agricultor).await()
+            } catch (e: Exception) {
+                Log.w("AgricultorRepo", "Falha ao subir agricultor ${agricultor.id}", e)
+            }
+        }
+    }
 
-    /**
-     * <<< ALTERAÇÃO 2: NOVA FUNÇÃO PÚBLICA DE SINCROZINAÇÃO (SOB DEMANDA) >>>
-     * Busca os dados do Firestore UMA VEZ e atualiza o Room.
-     * Esta é a função que o MyApplication vai chamar.
-     */
+    // --- PULL: Baixa da nuvem sem apagar os locais (Merge) ---
     suspend fun sincronizarAgricultoresDoFirestore() {
-        Log.d("AgricultorRepository", "Iniciando sincronização de agricultores (uma vez) do Firestore...")
+        Log.d("AgricultorRepo", "Baixando agricultores da nuvem...")
         try {
-            // Usa GET() para buscar os dados UMA VEZ
             val snapshots = agricultoresCollection.get().await()
             if (snapshots != null && !snapshots.isEmpty) {
-                val agricultoresDaNuvem = snapshots.toObjects(Agricultor::class.java)
-                Log.d("AgricultorRepository", "Recebidos ${agricultoresDaNuvem.size} agricultores da nuvem.")
-                sincronizarBancoLocal(agricultoresDaNuvem)
-            } else {
-                Log.w("AgricultorRepository", "Nenhum agricultor encontrado no Firestore durante a sincronização.")
+                val nuvem = snapshots.toObjects(Agricultor::class.java)
+                // AGORA É SEGURO: Não usamos deleteAll(), apenas atualizamos/inserimos
+                agricultorDao.insertAll(nuvem)
+                Log.d("AgricultorRepo", "Agricultores sincronizados (Merge).")
             }
         } catch (e: Exception) {
-            Log.e("AgricultorRepository", "Falha ao sincronizar agricultores do Firestore.", e)
+            Log.e("AgricultorRepo", "Falha ao baixar agricultores.", e)
         }
     }
 
-    private suspend fun sincronizarBancoLocal(agricultoresDaNuvem: List<Agricultor>) {
-        try {
-            // Estratégia de cache: apaga tudo e insere os dados novos da nuvem.
-            agricultorDao.deleteAll()
-            agricultorDao.insertAll(agricultoresDaNuvem)
-            Log.d("AgricultorRepository", "Banco local de agricultores sincronizado.")
-        } catch (e: Exception) {
-            Log.e("AgricultorRepository", "Erro ao sincronizar banco de agricultores.", e)
-        }
-    }
-
-    // Funções de busca continuam lendo do cache local, que é rápido
     fun searchAgricultores(query: String): Flow<List<Agricultor>> = agricultorDao.searchAgricultores(query)
     suspend fun getAgricultorById(id: String): Agricultor? = agricultorDao.getAgricultorById(id)
 }

@@ -39,38 +39,30 @@ class MyApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d("MyApplication", "onCreate: Iniciando app com prioridade LOCAL -> NUVEM.")
+        Log.d("MyApplication", "Iniciando app. Prioridade TOTAL: LOCAL -> NUVEM.")
 
         applicationScope.launch(Dispatchers.IO) {
-            // 1. Garante que dados estáticos básicos existam (se for primeira instalação)
+            // 1. Migração inicial de CSV/Dados fixos (apenas na 1ª vez)
             migrarDadosIniciaisParaFirestore()
 
-            // 2. UPLOAD: Garante que o que está no celular suba para a nuvem.
-            // Isso resolve o problema de "fonte principal é o celular".
-            Log.d("MyApplication", "Enviando feiras locais para a nuvem...")
+            // 2. UPLOAD GERAL: Garante que TUDO que está no celular vá para a nuvem.
+            Log.d("MyApplication", "--- FASE 1: UPLOAD (Local -> Nuvem) ---")
             feiraRepository.sincronizarFeirasLocaisParaNuvem()
+            produtoRepository.sincronizarProdutosLocaisParaNuvem()
+            agricultorRepository.sincronizarAgricultoresLocaisParaNuvem()
+            itemDespesaRepository.sincronizarItensLocaisParaNuvem()
 
-            // 3. DOWNLOAD: Atualiza dados estáticos (Produtos, etc) da nuvem
-            Log.d("MyApplication", "Baixando dados estáticos da nuvem...")
-            iniciarSincronizacaoDeDados()
+            // 3. DOWNLOAD GERAL: Baixa novidades da nuvem (Merge seguro)
+            Log.d("MyApplication", "--- FASE 2: DOWNLOAD (Nuvem -> Local) ---")
+            produtoRepository.sincronizarProdutosDoFirestore()
+            agricultorRepository.sincronizarAgricultoresDoFirestore()
+            itemDespesaRepository.sincronizarItensDespesaDoFirestore()
 
-            // 4. LISTEN: Começa a ouvir atualizações de feiras (sem apagar as locais)
-            Log.d("MyApplication", "Iniciando ouvinte de feiras...")
+            // 4. OUVINTE: Inicia monitoramento das feiras
+            Log.d("MyApplication", "--- FASE 3: OUVINTES ---")
             feiraRepository.iniciarOuvinteDaListaDeFeiras()
 
-            Log.d("MyApplication", "Inicialização concluída.")
-        }
-    }
-
-    private fun iniciarSincronizacaoDeDados() {
-        applicationScope.launch(Dispatchers.IO) {
-            try {
-                produtoRepository.sincronizarProdutosDoFirestore()
-                agricultorRepository.sincronizarAgricultoresDoFirestore()
-                itemDespesaRepository.sincronizarItensDespesaDoFirestore()
-            } catch (e: Exception) {
-                Log.e("MyApplication", "Falha na sincronização de dados estáticos.", e)
-            }
+            Log.d("MyApplication", "Inicialização Concluída.")
         }
     }
 
