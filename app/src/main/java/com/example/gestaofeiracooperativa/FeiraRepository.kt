@@ -70,19 +70,17 @@ class FeiraRepository(
                 sincronizarFeiraLocal(feiraEntity, entradas, perdas, despesas)
                 Log.d("FeiraRepo_Sync", "Sincronização explícita da feira $feiraId concluída.")
             }
-            // <<< ALTERAÇÃO: NÃO APAGAR LOCALMENTE SE NÃO ACHAR NA NUVEM >>>
-            // Se a nuvem falhar ou não tiver a feira, mantemos a cópia local segura.
-            // else { appDatabase.withTransaction { feiraDao.deleteFeiraById(feiraId) } }
         } catch (e: Exception) { Log.e("FeiraRepo_Sync", "Erro na sincronização explícita da feira $feiraId.", e) }
     }
 
+    // <<< CORREÇÃO AQUI: Removemos a sincronização forçada ao carregar >>>
     suspend fun carregarDadosCompletosFeira(feiraId: String): DadosCompletosFeira? {
-        // Tenta puxar da nuvem para ter o mais recente, mas não apaga se falhar
-        sincronizarFeiraDoFirestoreParaRoom(feiraId)
+        // REMOVIDO: sincronizarFeiraDoFirestoreParaRoom(feiraId)
+        // Motivo: Isso sobrescrevia os dados locais (novos) com dados da nuvem (antigos/vazios)
+        // Agora confiamos 100% no banco local, que é a fonte da verdade imediata.
         return carregarDadosCompletosFeiraLocal(feiraId)
     }
 
-    // Função auxiliar que apenas lê do banco local (já existente no seu código, mantida aqui)
     private suspend fun carregarDadosCompletosFeiraLocal(feiraId: String): DadosCompletosFeira? {
         val feiraEntity = feiraDao.getFeiraById(feiraId) ?: return null
         val entradasDoBanco = entradaDao.getEntradasForFeira(feiraId).firstOrNull() ?: emptyList()
@@ -169,20 +167,12 @@ class FeiraRepository(
 
             batch.commit().await()
 
-            // Sincroniza localmente APÓS sucesso no Firestore
             sincronizarFeiraLocal(feiraEntity, entradasEntities, perdasEntities, despesasEntities)
             true
         } catch (e: Exception) {
             Log.e("FeiraRepo_Save", "--- ERRO: Falha ao salvar na nuvem. ---", e)
-            // IMPORTANTE: Se falhar na nuvem, tentamos salvar localmente mesmo assim,
-            // para não perder o trabalho do usuário (modo offline/erro).
             try {
-                // Recriamos as entidades aqui pois o bloco try original pode ter falhado antes
-                // (Simplificação: assume-se que as entidades já foram criadas acima)
                 Log.w("FeiraRepo_Save", "Tentando salvar apenas localmente (Room)...")
-                // Nota: Para um código de produção robusto, extrairíamos a criação das entidades para fora do try.
-                // Mas como o foco é garantir que o celular é a fonte, se falhar a rede, o usuário vê erro,
-                // mas idealmente os dados continuam na tela ou no banco se já estavam lá.
             } catch (exLocal: Exception) {
                 Log.e("FeiraRepo_Save", "Erro fatal ao salvar localmente.", exLocal)
             }
@@ -205,11 +195,6 @@ class FeiraRepository(
         }
     }
 
-    // <<< ALTERAÇÃO 1: FUNÇÃO DE UPLOAD FORÇADO >>>
-    /**
-     * Pega TODAS as feiras locais e as envia para a nuvem (Sobrescrevendo/Atualizando a nuvem).
-     * Isso garante que o que está no celular (fonte principal) vá para o servidor.
-     */
     suspend fun sincronizarFeirasLocaisParaNuvem() {
         Log.d("FeiraRepo_Sync", "Iniciando UPLOAD de todas as feiras locais para a nuvem...")
         try {
@@ -235,7 +220,6 @@ class FeiraRepository(
         }
     }
 
-    // <<< ALTERAÇÃO 2: OUVINTE SEGURO (SEM DELETE ALL) >>>
     fun iniciarOuvinteDaListaDeFeiras() {
         CoroutineScope(Dispatchers.IO).launch {
             ouvirAtualizacoesDeFeiras()
@@ -249,9 +233,6 @@ class FeiraRepository(
                 val feirasDaNuvem = snapshots.toObjects(FeiraEntity::class.java)
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        // <<< MUDANÇA CRÍTICA: REMOVIDO O deleteAllFeiras() >>>
-                        // Em vez de apagar tudo, nós apenas inserimos/atualizamos o que vem da nuvem.
-                        // Isso preserva as feiras locais que ainda não subiram ou que são exclusivas do celular.
                         if (feirasDaNuvem.isNotEmpty()) {
                             Log.d("FeiraRepo_Sync", "Recebidas ${feirasDaNuvem.size} feiras da nuvem. Mesclando com locais...")
                             feiraDao.insertAllFeiras(feirasDaNuvem)
@@ -266,7 +247,6 @@ class FeiraRepository(
     suspend fun deletarFeira(feiraId: String): Boolean {
         return try {
             feirasCollection.document(feiraId).delete().await()
-            // Também apaga localmente para manter coerência
             appDatabase.withTransaction { feiraDao.deleteFeiraById(feiraId) }
             Log.d("FeiraRepository_Cloud", "Feira $feiraId deletada da nuvem e local.")
             true

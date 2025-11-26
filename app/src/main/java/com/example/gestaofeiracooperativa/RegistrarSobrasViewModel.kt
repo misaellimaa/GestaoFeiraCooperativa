@@ -35,8 +35,6 @@ class RegistrarSobrasViewModel(
                 Log.d("RegistrarSobrasVM", "Feira anterior encontrada: ${feiraAnterior?.feiraId}")
 
                 if (feiraAnterior != null) {
-                    // <<< CORREÇÃO PRINCIPAL: Força a sincronização da feira anterior >>>
-                    feiraRepository.sincronizarFeiraDoFirestoreParaRoom(feiraAnterior.feiraId)
 
                     // Agora, com a garantia de que os dados estão sincronizados, lê as perdas.
                     val perdas = perdaRepository.getPerdasForFeira(feiraAnterior.feiraId).first()
