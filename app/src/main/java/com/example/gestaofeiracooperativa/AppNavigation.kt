@@ -23,6 +23,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 // Imports de Telas
 import com.example.gestaofeiracooperativa.HomeScreen
@@ -248,22 +250,48 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                         if (isSaving) return@LancamentoScreen
                         isSaving = true
 
-                        val feiraParaAtualizar = feiraEmProcessamento ?: run { isSaving = false; return@LancamentoScreen }
-                        val mapaDeEntradasAtualizado = feiraParaAtualizar.entradasTodosAgricultores.toMutableMap().apply { this[agricultorIdArg] = novasEntradas }
-                        val feiraAtualizada = feiraParaAtualizar.copy(entradasTodosAgricultores = mapaDeEntradasAtualizado)
-                        feiraEmProcessamento = feiraAtualizada
-
                         scope.launch {
                             try {
-                                if (feiraRepository.salvarDadosCompletosFeira(feiraAtualizada)) {
-                                    isCurrentFeiraPersisted = true
-                                    Toast.makeText(context, "Entradas salvas e feira atualizada!", Toast.LENGTH_SHORT).show()
-                                    navController.popBackStack() // <<< SÓ VOLTA EM CASO DE SUCESSO
-                                } else {
-                                    Toast.makeText(context, "Erro ao salvar. Tente novamente.", Toast.LENGTH_LONG).show()
+                                // <<< ALTERAÇÃO CRÍTICA: Salvar usando a lógica segura no Repositório >>>
+                                // Em vez de atualizar o objeto 'feiraEmProcessamento' e salvar tudo (o que poderia sobrescrever sobras com 0),
+                                // salvamos cada entrada individualmente no banco de dados usando a função que preserva a sobra.
+
+                                novasEntradas.forEach { itemUi ->
+                                    // Converte o mapa de dias para JSON
+                                    val jsonPesos = Json.encodeToString(itemUi.quantidadesPorDia)
+
+                                    entradaRepository.salvarEntradaPreservandoSobra(
+                                        feiraId = feiraIdArg,
+                                        agricultorId = agricultorIdArg,
+                                        produtoNumero = itemUi.produto!!.numero,
+                                        quantidadesPorDiaJson = jsonPesos
+                                    )
                                 }
+
+                                // Após salvar no banco local com segurança, recarregamos a feira completa
+                                // para atualizar a memória do app (feiraEmProcessamento) com os dados mesclados (sobra + peso)
+                                val feiraAtualizada = feiraRepository.carregarDadosCompletosFeira(feiraIdArg)
+                                if (feiraAtualizada != null) {
+                                    feiraEmProcessamento = feiraAtualizada
+
+                                    // Opcional: Sincronizar com a nuvem agora ou deixar para o usuário clicar em "Salvar Feira"
+                                    // Para garantir, podemos salvar a feira completa agora:
+                                    if (feiraRepository.salvarDadosCompletosFeira(feiraAtualizada)) {
+                                        Toast.makeText(context, "Entradas salvas com sucesso!", Toast.LENGTH_SHORT).show()
+                                        navController.popBackStack()
+                                    } else {
+                                        Toast.makeText(context, "Salvo localmente, mas erro ao subir para nuvem.", Toast.LENGTH_LONG).show()
+                                        navController.popBackStack()
+                                    }
+                                } else {
+                                    Toast.makeText(context, "Erro ao recarregar dados da feira.", Toast.LENGTH_LONG).show()
+                                }
+
+                            } catch (e: Exception) {
+                                Log.e("AppNavigation", "Erro ao salvar entradas", e)
+                                Toast.makeText(context, "Erro ao salvar. Tente novamente.", Toast.LENGTH_LONG).show()
                             } finally {
-                                isSaving = false // <<< SEMPRE LIBERA O BOTÃO
+                                isSaving = false
                             }
                         }
                     },
@@ -279,31 +307,14 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
                 PerdasTotaisScreen(
                     feiraId = currentFeira.fairDetails.feiraId,
                     catalogoProdutos = todosOsProdutosState,
-                    perdasIniciais = currentFeira.perdasTotaisDaFeira.toList(),
-                    isSaving = isSaving,
-                    onFinalizarPerdas = { novasPerdas ->
-                        if(isSaving) return@PerdasTotaisScreen
-                        isSaving = true
-
-                        val feiraParaAtualizar = feiraEmProcessamento ?: run { isSaving = false; return@PerdasTotaisScreen }
-                        val feiraAtualizada = feiraParaAtualizar.copy(perdasTotaisDaFeira = novasPerdas)
-                        feiraEmProcessamento = feiraAtualizada
-
+                    onVoltar = {
+                        // Recarrega os dados ao voltar para garantir que a tela de Gerenciar Feira tenha os dados atualizados
                         scope.launch {
-                            try {
-                                if (feiraRepository.salvarDadosCompletosFeira(feiraAtualizada)) {
-                                    isCurrentFeiraPersisted = true
-                                    Toast.makeText(context, "Perdas salvas e feira atualizada!", Toast.LENGTH_SHORT).show()
-                                    navController.popBackStack() // <<< SÓ VOLTA EM CASO DE SUCESSO
-                                } else {
-                                    Toast.makeText(context, "Erro ao salvar. Verifique sua conexão e tente novamente.", Toast.LENGTH_LONG).show()
-                                }
-                            } finally {
-                                isSaving = false // <<< SEMPRE LIBERA O BOTÃO
-                            }
+                            val dadosAtualizados = feiraRepository.carregarDadosCompletosFeira(feiraIdArg)
+                            if (dadosAtualizados != null) feiraEmProcessamento = dadosAtualizados
+                            navController.popBackStack()
                         }
-                    },
-                    onVoltar = { if (!isSaving) navController.popBackStack() }
+                    }
                 )
             } else { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
         }

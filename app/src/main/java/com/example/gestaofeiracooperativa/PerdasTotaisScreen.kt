@@ -19,29 +19,31 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel // Importante para o ViewModel
 import java.util.Locale
-
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun PerdasTotaisScreen(
     feiraId: String,
     catalogoProdutos: List<Produto>,
-    perdasIniciais: List<PerdaItemFeira>,
-    isSaving: Boolean,
-    onFinalizarPerdas: (List<PerdaItemFeira>) -> Unit,
     onVoltar: () -> Unit
 ) {
     val context = LocalContext.current
-    val perdasRegistradas = remember { mutableStateListOf<PerdaItemFeira>() }
+    val application = context.applicationContext as MyApplication
 
-    // Sincroniza a lista local com os dados iniciais
-    LaunchedEffect(perdasIniciais) {
-        if (perdasRegistradas.toList() != perdasIniciais) {
-            perdasRegistradas.clear()
-            perdasRegistradas.addAll(perdasIniciais)
-        }
-    }
+    // Instancia o ViewModel
+    val viewModel: PerdasTotaisViewModel = viewModel(
+        factory = PerdasTotaisViewModelFactory(
+            feiraId,
+            application.perdaRepository,
+            application.produtoRepository
+        )
+    )
+
+    // Observa os estados do ViewModel (dados sobrevivem à rotação)
+    val perdasRegistradas by viewModel.perdasRegistradas.collectAsState()
+    val isSaving by viewModel.isLoading.collectAsState()
 
     var produtoSelecionado by remember { mutableStateOf<Produto?>(null) }
     var textoBuscaProduto by remember(produtoSelecionado) {
@@ -89,7 +91,7 @@ fun PerdasTotaisScreen(
             icon = { Icon(Icons.Default.Warning, contentDescription = "Aviso")},
             title = { Text("Confirmar Remoção") },
             text = { Text("Tem certeza que deseja remover as perdas para '${perdasRegistradas.getOrNull(itemIndexToDelete ?: -1)?.produto?.item}'?") },
-            confirmButton = { TextButton(onClick = { itemIndexToDelete?.let { if (it in perdasRegistradas.indices) perdasRegistradas.removeAt(it) }; showConfirmDeleteDialog = false; itemIndexToDelete = null }) { Text("Remover") } },
+            confirmButton = { TextButton(onClick = { itemIndexToDelete?.let { viewModel.removerPerda(it) }; showConfirmDeleteDialog = false; itemIndexToDelete = null }) { Text("Remover") } },
             dismissButton = { TextButton(onClick = { showConfirmDeleteDialog = false; itemIndexToDelete = null }) { Text("Cancelar") } }
         )
     }
@@ -158,12 +160,17 @@ fun PerdasTotaisScreen(
                                     produtoSelecionado?.let { produto ->
                                         val perdasValidasPorDia = mutableMapOf<String, Double>()
                                         diasDaSemanaFeira.forEach { dia -> perdasDiariasInput[dia]?.replace(',', '.')?.toDoubleOrNull()?.let { valor -> perdasValidasPorDia[dia] = valor } }
-                                        val novaPerda = PerdaItemFeira(produto, HashMap(perdasValidasPorDia))
-                                        if (editIndex != null) { perdasRegistradas[editIndex!!] = novaPerda }
-                                        else {
-                                            if (perdasRegistradas.any { it.produto?.numero == produto.numero }) { Toast.makeText(context, "Perda para este produto já foi adicionada.", Toast.LENGTH_SHORT).show() }
-                                            else { perdasRegistradas.add(novaPerda) }
-                                        }
+
+                                        // Mantém a sobra anterior se estiver editando (o ViewModel cuida da lista completa, mas aqui criamos o objeto)
+                                        // OBS: Na tela de perdas, geralmente a "sobra" é a sobra da semana anterior (que é raro em perdas, mas o campo existe).
+                                        // Se você usa esse campo, precisaria recuperá-lo. Se não, 0.0 é ok.
+                                        // Vou assumir 0.0 ou manter o que estava na edição:
+                                        val sobraAnterior = if (editIndex != null) perdasRegistradas[editIndex!!].quantidadeSobra else 0.0
+
+                                        val novaPerda = PerdaItemFeira(produto, HashMap(perdasValidasPorDia), sobraAnterior)
+
+                                        viewModel.adicionarOuAtualizarPerda(novaPerda)
+
                                         limparCamposDeEntradaESairDaEdicao()
                                     } ?: Toast.makeText(context, "Selecione um produto.", Toast.LENGTH_SHORT).show()
                                 },
@@ -225,7 +232,12 @@ fun PerdasTotaisScreen(
             }
 
             Button(
-                onClick = { onFinalizarPerdas(perdasRegistradas.toList()) },
+                onClick = {
+                    viewModel.salvarPerdasFinais {
+                        Toast.makeText(context, "Perdas salvas com sucesso!", Toast.LENGTH_SHORT).show()
+                        onVoltar()
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().height(50.dp).padding(top = 16.dp),
                 enabled = !isSaving
             ) {
